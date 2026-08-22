@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>安全智能体系统 · 运营看板（接口对齐版）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">安全智能体系统 <span class="sub">· 运营看板（接口对齐 MVP）</span></div>
+  <div class="source-tag" id="source-tag">数据来源：演示数据（后端未启动，已自动降级）</div>
+</header>
+
+<div class="container">
+  <!-- 左侧 -->
+  <div class="left-panel">
+    <section class="card">
+      <div class="card-head">
+        <h3>事件列表</h3>
+        <span class="hint">GET /events → list[EventListItem]</span>
+      </div>
+      <div class="table-header">
+        <div>event_id</div><div>trace_id</div><div>status</div>
+        <div>source</div><div>summary</div><div>操作</div>
+      </div>
+      <div id="event-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3>关键指标</h3>
+        <span class="hint">GET /metrics</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">total_events</div><div class="kpi-value" id="kpi-total">--</div></div>
+        <div class="kpi-card"><div class="kpi-label">completed_events</div><div class="kpi-value" id="kpi-completed">--</div></div>
+        <div class="kpi-card"><div class="kpi-label">human_required_events</div><div class="kpi-value" id="kpi-human">--</div></div>
+        <div class="kpi-card"><div class="kpi-label">failed_events</div><div class="kpi-value" id="kpi-failed">--</div></div>
+      </div>
+      <p class="note" id="metrics-note"></p>
+    </section>
+  </div>
+
+  <!-- 右侧详情 -->
+  <div class="right-panel">
+    <div class="card-head">
+      <h3>事件详情 / 可审计处理时间线</h3>
+      <span class="hint">GET /events/{id} · GET /events/{id}/timeline</span>
+    </div>
+    <div id="detail" class="detail-box">
+      <p class="placeholder">点击左侧事件查看详情…</p>
+      <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- 审批弹窗 -->
+<div id="approval-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">高风险处置审批</h3>
+      <button class="close-btn" onclick="closeApprovalModal()">&times;</button>
+    </div>
+    <form id="approval-form">
+      <div class="form-group">
+        <label class="form-label">event_id</label>
+        <input id="m-event" class="form-input" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">approved</label>
+        <select id="m-approved" class="form-select" required>
+          <option value="">-- 请选择 --</option>
+          <option value="true">true（同意执行）</option>
+          <option value="false">false（驳回）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">approver</label>
+        <input id="m-approver" class="form-input" placeholder="审批人姓名" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">reason</label>
+        <textarea id="m-reason" class="form-textarea" placeholder="审批意见（可选）"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">idempotency_key（前端生成 UUID）</label>
+        <input id="m-idem" class="form-input" readonly>
+      </div>
+      <p class="form-hint">POST /events/{id}/approval · Body: ApprovalDecision</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeApprovalModal()">取消</button>
+        <button type="submit" class="btn btn-primary">提交审批</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="demo-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
