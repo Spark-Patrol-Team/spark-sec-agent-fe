@@ -34,7 +34,7 @@ async function loadAll(){
   let m = await jfetch(API+"/metrics");
   if(!m){ m = window.DEMO_METRICS; usingDemo=true; }
   metrics = m; renderMetrics();
-  $("#source-tag").textContent = usingDemo? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：李雨妍后端接口（真实数据）";
+  $("#source-tag").textContent = usingDemo? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：后端接口（真实数据）";
 }
 
 function renderList(){
