@@ -8,7 +8,7 @@
 
 - **定位**：MVP 最小可运行前端框架，用于演示主链主要状态流转与接口对接能力。
 - **技术栈**：原生 HTML + CSS + JavaScript（ES6），**无第三方依赖**，不依赖 Node.js / npm / Webpack。
-- **运行方式**：双击 `index.html` 即可在浏览器打开；默认走内嵌演示数据（Mock），后端不可用时自动降级。
+- **运行方式**：采用前后端分离架构，后端配置仅允许本地开发地址的 CORS，前端通过本地 HTTP 服务打开。
 - **适用场景**：组长/评委演示、前后端接口联调、运营看板原型验证。
 
 ## 二、文件结构
@@ -40,15 +40,31 @@ spark-sec-agent-fe/
 - 事件列表覆盖 4 种代表性状态：`COMPLETED` / `INVESTIGATING` / `APPROVAL_REQUIRED` / `FAILED`。
 - 所有渲染均基于 `demo-data.js` 内嵌数据，不发起任何网络请求。
 
-### 方式二：对接真实后端
+### 方式二：对接真实后端（推荐联调使用）
 
-1. 启动后端服务（李雨妍维护的 `spark-sec-agent-be`）：
+采用前后端分离架构：后端配置仅允许本地开发地址的 CORS，前端通过本地 HTTP 服务打开。
+
+1. **启动后端**：
    ```bash
    cd spark-sec-agent-be
-   uvicorn sec_agent.main:app --reload --root-path src
+   pip install -e .
+   uvicorn sec_agent.main:app --reload
    ```
-2. 确认后端运行在 `http://localhost:8000`（可在 `app.js` 顶部 `API_BASE` 常量修改地址）。
-3. 刷新 `index.html`，页面自动改走真实接口；接口不可达时自动回退演示数据。
+   后端运行在 `http://localhost:8000`。
+
+2. **启动前端本地 HTTP 服务**（**禁止直接双击 `index.html`**）：
+   ```bash
+   cd spark-sec-agent-fe
+   python -m http.server 8080
+   ```
+
+3. **访问页面**：浏览器打开 `http://localhost:8080/index.html`
+
+4. 确认 `app.js` 顶部 `API` 常量为 `http://localhost:8000`。
+
+5. 刷新页面，前端自动请求真实接口；若接口不可达则自动回退演示数据。
+
+> **降级说明**：前端只有在**后端服务未启动**或**接口返回错误**时，才会自动切换到 `demo-data.js` 的演示数据。页面右上角会明确显示"数据来源：演示数据（后端未启动，已自动降级）"。联调时应确保后端已启动，且右上角显示"数据来源：后端接口（真实数据）"。
 
 ### 调试方法
 
@@ -117,4 +133,4 @@ spark-sec-agent-fe/
 
 ---
 
-**维护者**：黄佳丽 · **所属模块**：frontend · **任务编号**：T0822-frontend-basic-page
+**维护者**：黄佳丽 · **所属模块**：frontend · **任务编号**：T0824-黄佳丽-前端运行说明修正
