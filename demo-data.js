@@ -97,5 +97,5 @@ window.DEMO_EVENTS = [
 
 window.DEMO_METRICS = {
   total_events:42, completed_events:38, human_required_events:3, failed_events:1,
-  note:"演示数据：真实数据就绪后由 GET /metrics 返回；无可靠标签时不统计准确率/召回率等指标"
+  note:""
 };
