@@ -32,7 +32,6 @@ header{position:fixed;top:0;left:0;width:100%;height:52px;background:#0b1220;bor
 .kpi-card{background:#0f172a;border:1px solid var(--line);border-radius:6px;padding:12px;text-align:center;}
 .kpi-value{font-size:22px;font-weight:700;color:var(--primary);margin:4px 0;}
 .kpi-label{font-size:11px;color:var(--muted);}
-.note{font-size:11px;color:var(--muted);margin:8px 0 0;}
 .detail-box{background:#0f172a;border:1px solid var(--line);border-radius:6px;padding:16px;flex:1;overflow:auto;font-size:13px;}
 .placeholder{text-align:center;color:var(--muted);}.placeholder.sub{font-size:11px;}
 .sec{font-size:13px;font-weight:700;margin:14px 0 8px;border-left:3px solid var(--primary);padding-left:8px;}
