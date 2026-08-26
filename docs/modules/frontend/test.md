@@ -90,16 +90,11 @@ curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -d '
 
 | 证据 | 位置 | 脱敏状态 | 支持的结论 |
 |---|---|---|---|
-| <img width="872" height="736" alt="image" src="https://github.com/user-attachments/assets/98716660-2f03-4362-a50c-e47d8207bad0" />
- | 截图 EVID-001 | 已脱敏 | 接口返回 200 和非空数组 |
-| <img width="874" height="332" alt="image" src="https://github.com/user-attachments/assets/e1d3f154-37f4-4701-80a5-97d02c34d3d9" />
- | 截图 EVID-002 | 已脱敏 | 接口返回 200 和完整详情 |
-| <img width="554" height="354" alt="image" src="https://github.com/user-attachments/assets/465f0794-4328-413b-8ac3-2b590edd4355" />
- | 截图 EVID-003 | 已脱敏 | 接口返回 200 和指标数据 |
-| <img width="877" height="621" alt="image" src="https://github.com/user-attachments/assets/47d31e67-ee6c-4f9f-a7ac-72b56563e9a7" />
- | 截图 EVID-004 | 已脱敏 | 审批提交返回 200 |
-| <img width="1323" height="898" alt="image" src="https://github.com/user-attachments/assets/d6d9bc60-8ed8-4348-98ff-8bd1ec9e4b07" />
- | 截图 EVID-005 | 已脱敏 | 真实数据渲染正常，点击切换正常 |
+| <img width="872" height="736" alt="image" src="https://github.com/user-attachments/assets/98716660-2f03-4362-a50c-e47d8207bad0" /> | 截图 EVID-001 | 已脱敏 | 接口返回 200 和非空数组 |
+| <img width="874" height="332" alt="image" src="https://github.com/user-attachments/assets/e1d3f154-37f4-4701-80a5-97d02c34d3d9" /> | 截图 EVID-002 | 已脱敏 | 接口返回 200 和完整详情 |
+| <img width="554" height="354" alt="image" src="https://github.com/user-attachments/assets/465f0794-4328-413b-8ac3-2b590edd4355" /> | 截图 EVID-003 | 已脱敏 | 接口返回 200 和指标数据 |
+| <img width="877" height="621" alt="image" src="https://github.com/user-attachments/assets/47d31e67-ee6c-4f9f-a7ac-72b56563e9a7" /> | 截图 EVID-004 | 已脱敏 | 审批提交返回 200 |
+| <img width="1323" height="898" alt="image" src="https://github.com/user-attachments/assets/d6d9bc60-8ed8-4348-98ff-8bd1ec9e4b07" /> | 截图 EVID-005 | 已脱敏 | 真实数据渲染正常，点击切换正常 |
 
 ## 8. 失败项与已知限制
 
