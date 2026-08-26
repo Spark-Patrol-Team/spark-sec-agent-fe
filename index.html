@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>安全智能体系统 · 运营看板（接口对齐版）</title>
+<title>安全智能体系统 · 运营看板</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header>
-  <div class="brand">安全智能体系统 <span class="sub">· 运营看板（接口对齐 MVP）</span></div>
+  <div class="brand">安全智能体系统 <span class="sub">· 运营看板</span></div>
   <div class="source-tag" id="source-tag">数据来源：演示数据（后端未启动，已自动降级）</div>
 </header>
 
@@ -18,7 +18,6 @@
     <section class="card">
       <div class="card-head">
         <h3>事件列表</h3>
-        <span class="hint">GET /events → list[EventListItem]</span>
       </div>
       <div class="table-header">
         <div>event_id</div><div>trace_id</div><div>status</div>
@@ -30,7 +29,6 @@
     <section class="card">
       <div class="card-head">
         <h3>关键指标</h3>
-        <span class="hint">GET /metrics</span>
       </div>
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-label">total_events</div><div class="kpi-value" id="kpi-total">--</div></div>
@@ -38,20 +36,17 @@
         <div class="kpi-card"><div class="kpi-label">human_required_events</div><div class="kpi-value" id="kpi-human">--</div></div>
         <div class="kpi-card"><div class="kpi-label">failed_events</div><div class="kpi-value" id="kpi-failed">--</div></div>
       </div>
-      <p class="note" id="metrics-note"></p>
     </section>
   </div>
 
   <!-- 右侧详情 -->
-  <div class="right-panel">
-    <div class="card-head">
-      <h3>事件详情 / 可审计处理时间线</h3>
-      <span class="hint">GET /events/{id} · GET /events/{id}/timeline</span>
-    </div>
-    <div id="detail" class="detail-box">
-      <p class="placeholder">点击左侧事件查看详情…</p>
-      <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
-    </div>
+<div class="right-panel">
+  <div class="card-head">
+    <h3>事件详情 / 可审计处理时间线</h3>
+  </div>
+  <div id="detail" class="detail-box">
+    <p class="placeholder">点击左侧事件查看详情…</p>
+    <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
   </div>
 </div>
 
