@@ -25,20 +25,38 @@ async function jfetch(url){
 function uuid(){ return crypto.randomUUID? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==="x"?r:(r&0x3|0x8)).toString(16);}); }
 
 async function loadAll(){
-  // 列表
+  // 列表：仅当请求失败（返回 null）时才降级，否则使用后端数据（包括空数组）
   let list = await jfetch(API+"/events");
-  if(!list || !Array.isArray(list)){ list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary})); usingDemo=true; }
+  if(list === null){
+    list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary}));
+    usingDemo = true;
+  } else {
+    usingDemo = false;
+  }
   events = list;
   renderList();
-  // 指标
+
+  // 指标：同样仅当请求失败时降级
   let m = await jfetch(API+"/metrics");
-  if(!m){ m = window.DEMO_METRICS; usingDemo=true; }
-  metrics = m; renderMetrics();
-  $("#source-tag").textContent = usingDemo? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：后端接口（真实数据）";
+  if(m === null){
+    m = window.DEMO_METRICS;
+    usingDemo = true;
+  } else {
+    usingDemo = false;
+  }
+  metrics = m;
+  renderMetrics();
+
+  const sourceTag = $("#source-tag");
+  if(sourceTag) {
+    sourceTag.textContent = usingDemo ? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：后端接口（真实数据）";
+  }
 }
 
 function renderList(){
-  const c = $("#event-list"); c.innerHTML="";
+  const c = $("#event-list"); 
+  if(!c) return;
+  c.innerHTML="";
   events.forEach(ev=>{
     const row = document.createElement("div"); row.className="event-row";
     row.innerHTML = `
@@ -54,22 +72,38 @@ function renderList(){
 }
 
 function renderMetrics(){
-  $("#kpi-total").textContent = metrics.total_events?? "--";
-  $("#kpi-completed").textContent = metrics.completed_events?? "--";
-  $("#kpi-human").textContent = metrics.human_required_events?? "--";
-  $("#kpi-failed").textContent = metrics.failed_events?? "--";
-  $("#metrics-note").textContent = metrics.note? "注："+metrics.note : "";
+  const kpis = {
+    total: $("#kpi-total"),
+    completed: $("#kpi-completed"),
+    human: $("#kpi-human"),
+    failed: $("#kpi-failed")
+  };
+  if(kpis.total) kpis.total.textContent = metrics.total_events?? "--";
+  if(kpis.completed) kpis.completed.textContent = metrics.completed_events?? "--";
+  if(kpis.human) kpis.human.textContent = metrics.human_required_events?? "--";
+  if(kpis.failed) kpis.failed.textContent = metrics.failed_events?? "--";
 }
 
 async function renderDetail(id){
-  $("#cur-trace").textContent="加载中…";
+  // 保护：先检查元素是否存在
+  const curTrace = $("#cur-trace");
+  if(curTrace) curTrace.textContent = "加载中…";
+  
   let ctx = await jfetch(API+"/events/"+encodeURIComponent(id));
   if(!ctx){
     ctx = window.DEMO_EVENTS.find(x=>x.event_id===id);
-    if(!ctx){ $("#detail").innerHTML='<p class="placeholder">未找到事件</p>'; return; }
+    if(!ctx){ 
+      const detailBox = $("#detail");
+      if(detailBox) detailBox.innerHTML='<p class="placeholder">未找到事件</p>'; 
+      return; 
+    }
   }
-  $("#cur-trace").textContent = ctx.trace_id||"--";
+  
+  if(curTrace) curTrace.textContent = ctx.trace_id||"--";
+  
   const box = $("#detail");
+  if(!box) return;
+  
   const tl = (ctx.timeline||[]).map(t=>{
     const sc = statusClass(t.status); const dot = dotColor("done");
     return `<div class="item"><div class="dot" style="background:${dot}"></div><div><div class="tl-title">${escapeHtml(t.status)}<span class="tag">${escapeHtml(t.message||"")}</span></div><div class="tl-meta">${escapeHtml(t.at||"")}${t.elapsed_ms!=null? " · "+t.elapsed_ms+"ms":""}</div></div></div>`;
@@ -135,22 +169,52 @@ async function renderDetail(id){
 /* ---------- 审批弹窗 ---------- */
 const modal = $("#approval-modal");
 function openApprovalModal(id){
-  $("#m-event").value = id; $("#m-approved").value=""; $("#m-approver").value=""; $("#m-reason").value="";
-  $("#m-idem").value = uuid(); modal.style.display="flex";
+  const mEvent = $("#m-event");
+  const mApproved = $("#m-approved");
+  const mApprover = $("#m-approver");
+  const mReason = $("#m-reason");
+  const mIdem = $("#m-idem");
+  
+  if(mEvent) mEvent.value = id;
+  if(mApproved) mApproved.value="";
+  if(mApprover) mApprover.value="";
+  if(mReason) mReason.value="";
+  if(mIdem) mIdem.value = uuid();
+  
+  if(modal) modal.style.display="flex";
 }
-function closeApprovalModal(){ modal.style.display="none"; }
+function closeApprovalModal(){ if(modal) modal.style.display="none"; }
 window.openApprovalModal = openApprovalModal; window.closeApprovalModal = closeApprovalModal;
 
-$("#approval-form").addEventListener("submit",async function(e){
-  e.preventDefault();
-  const id = $("#m-event").value;
-  const approved = $("#m-approved").value === "true";
-  const body = { approved, approver:$("#m-approver").value.trim(), reason:$("#m-reason").value.trim(), idempotency_key:$("#m-idem").value };
-  let res = null;
-  try{ res = await fetch(API+"/events/"+encodeURIComponent(id)+"/approval",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }); }
-  catch(err){ res=null; }
-  if(res && res.ok){ alert("审批已提交（真实接口）"); closeApprovalModal(); renderDetail(id); }
-  else { alert("后端不可用，已按演示模式记录审批（不会真实生效）\n\n"+JSON.stringify(body,null,2)); closeApprovalModal(); }
-});
+const approvalForm = $("#approval-form");
+if(approvalForm) {
+  approvalForm.addEventListener("submit",async function(e){
+    e.preventDefault();
+    const id = $("#m-event")?.value;
+    const approved = ($("#m-approved")?.value) === "true";
+    const body = { 
+      approved, 
+      approver:($("#m-approver")?.value||"").trim(), 
+      reason:($("#m-reason")?.value||"").trim(), 
+      idempotency_key:($("#m-idem")?.value||uuid()) 
+    };
+    let res = null;
+    try{ 
+      res = await fetch(API+"/events/"+encodeURIComponent(id)+"/approval",{ 
+        method:"POST", 
+        headers:{"Content-Type":"application/json"}, 
+        body:JSON.stringify(body) 
+      }); 
+    } catch(err){ res=null; }
+    if(res && res.ok){ 
+      alert("审批已提交（真实接口）"); 
+      closeApprovalModal(); 
+      renderDetail(id); 
+    } else { 
+      alert("后端不可用，已按演示模式记录审批（不会真实生效）\n\n"+JSON.stringify(body,null,2)); 
+      closeApprovalModal(); 
+    }
+  });
+}
 
 loadAll();
