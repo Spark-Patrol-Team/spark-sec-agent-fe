@@ -136,3 +136,20 @@ GET http://127.0.0.1:8000/events
 | 日期 | PR/Commit | 实现变化 | 相关测试 |
 |---|---|---|---|
 | 2026-08-26 | spark-sec-agent-fe/main | 修改版本，记录前端联调实现 | 见 test.md |
+
+
+
+# T0827-04 开发说明
+
+## 1. 代码改动范围
+- 修改 `app.js`：重构请求逻辑，增加来源标签渲染、异常处理和降级判断。
+- 修改 `demo-data.js`：调整降级触发阈值，增加提示文案。
+
+## 2. 本地运行环境
+- **前端**：Python 3 内置服务 `python -m http.server 8080`
+- **后端**：Uvicorn `uvicorn sec_agent.api.app:app --reload --app-dir src` (端口 8000)
+
+## 3. 关键函数说明
+- `jfetch(url, options)`: 封装了 fetch，增加了 10s 超时控制和 try-catch。
+- `checkFallbackNeeded(response)`: 判断是否触发降级。
+- `renderSourceTag(sampleNature)`: 渲染来源标签。

@@ -14,13 +14,41 @@ const dotColor = (st)=>({done:"#22c55e",doing:"#eab308",failed:"#ef4444",pending
 
 let events = []; let metrics = null; let usingDemo = false;
 
-async function jfetch(url){
+// ===== 修改点：增加超时控制的 jfetch 函数 =====
+async function jfetch(url, timeoutMs = 10000){
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // 10秒后主动中断
+
   try{
-    const r = await fetch(url);
-    if(!r.ok) throw new Error(r.status);
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId); // 请求完成，清除定时器
+
+    if(!r.ok){
+      // 如果状态码是 401 或 403，弹出登录失效提示
+      if(r.status === 401 || r.status === 403){
+        alert('登录已失效，请重新登录');
+        return null;  // 返回 null 触发降级逻辑
+      }
+      throw new Error(r.status);
+    }
     return await r.json();
-  }catch(e){ return null; }
+  }catch(e){
+    clearTimeout(timeoutId); // 确保定时器被清除
+
+    // 超时错误特殊处理
+    if(e.name === 'AbortError'){
+      console.error('请求超时', url);
+      // 可以在这里弹出提示（如果需要）
+      // alert('请求超时，请稍后重试');
+      return null; // 返回 null 触发降级逻辑
+    }
+
+    // 网络错误或其他异常
+    console.error('请求失败', e);
+    return null;
+  }
 }
+// ===== 修改结束 =====
 
 function uuid(){ return crypto.randomUUID? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==="x"?r:(r&0x3|0x8)).toString(16);}); }
 
@@ -57,6 +85,14 @@ function renderList(){
   const c = $("#event-list"); 
   if(!c) return;
   c.innerHTML="";
+  
+  // ===== 新增：空状态判断 =====
+  if(!events || events.length === 0){
+    c.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px 0;">暂无事件数据</div>';
+    return;
+  }
+  // ===== 新增结束 =====
+  
   events.forEach(ev=>{
     const row = document.createElement("div"); row.className="event-row";
     row.innerHTML = `
@@ -66,7 +102,7 @@ function renderList(){
       <div>${escapeHtml(ev.source||"")}</div>
       <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ev.summary||"")}">${escapeHtml(ev.summary||"")}</div>
       <div>${ev.status==="APPROVAL_REQUIRED"? '<button class="btn btn-danger" data-approve="'+escapeHtml(ev.event_id)+'">审批</button>' : ""}</div>`;
-    row.addEventListener("click",e=>{ if(e.target.dataset.approve){ openApprovalModal(e.target.dataset.approve); return; } renderDetail(ev.event_id); });
+    row.addEventListener("click",e=>{ if(e.target.dataset.approve){ openApprovalModal(e.target.dataset.approve); return; } renderDetail(e.target.dataset.id||ev.event_id); });
     c.appendChild(row);
   });
 }

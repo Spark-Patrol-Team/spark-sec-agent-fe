@@ -114,3 +114,36 @@ curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -d '
 | 日期 | 基线Commit | 新增或变更测试 | 结论 |
 |---|---|---|---|
 | 2026-08-26 | 无 | 首次联调测试 | 通过 |
+
+
+# T0827-04 数据来源与最终前端联调
+
+## 基础信息
+- **前端Commit**：https://github.com/Spark-Patrol-Team/spark-sec-agent-fe/pull/new/feature/frontend-resilience-0827
+- **后端候选Commit**：未知
+- **测试时间**：2026-08-27
+- **前端地址**：http://localhost:8080
+- **后端地址**：http://localhost:8000
+- **run_id / trace_id**：无
+- **数据性质**：real_xdr (正常) / mock / fixed_sample / demo (降级)
+
+## 验证表格
+| 检查项 | 接口 | HTTP状态 | 页面结果 | 是否使用demo-data.js | 证据 |
+| :--- | :--- | :---: | :--- | :---: | :--- |
+| 事件列表 | GET /api/events | 200 | 正常显示，标签正确 | 否 | ![事件列表网络请求](../../evidence/T0827-04/01-event-list-network.png) |
+| 事件详情 | GET /api/event/:id | 200 | 正常显示 | 否 | ![事件详情网络请求](../../evidence/T0827-04/02-event-detail-network.png) |
+| 时间线 | GET /api/timeline | 200 | 正常显示 | 否 | ![时间线网络请求](../../evidence/T0827-04/03-timeline-network.png) |
+| 指标 | GET /api/metrics | 200 | 正常显示 | 否 | ![指标网络请求](../../evidence/T0827-04/04-metrics-network.png) |
+| 审批 | POST /api/approval | 200 | 成功，状态流转 | 否 | ![审批网络请求](../../evidence/T0827-04/05-approval-network.png) |
+| 最终状态 | - | - | COMPLETED | 否 | ![完成页面](../../evidence/T0827-04/06-completed-page.png) |
+| 空结果 | GET /api/empty | 200 | 显示“暂无数据” | 否 | ![空列表](../../evidence/T0827-04/07-empty-list.png) |
+| 鉴权失败 | GET /api/unauth | 401 | 提示登录失效 | 否 | ![鉴权失败](../../evidence/T0827-04/08-auth-fail.png) |
+| 超时/Fallback | GET /api/timeout | - | 显示演示数据 | 是 | ![超时降级](../../evidence/T0827-04/09-timeout.png) |
+
+## 结论
+- **正常联调**：✅ 未触发演示数据，数据来源标识清晰。
+- **异常状态**：✅ 鉴权、超时、空结果均可识别，未冒充真实数据。
+- **降级逻辑**：✅ 仅在后端不可用时降级。
+
+## 已知问题
+- 无
