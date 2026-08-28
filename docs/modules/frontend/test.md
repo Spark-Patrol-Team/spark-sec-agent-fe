@@ -147,3 +147,83 @@ curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -d '
 
 ## 已知问题
 - 无
+
+
+# T0828-04 前端统一候选与来源展示 
+
+## 基础信息
+
+| 项目 | 内容 |
+|---|---|
+| 任务 | T0828-04 前端统一候选与来源展示 |
+| 负责人 | 黄佳丽 |
+| 前端 Commit | 01b42e6（`feature/frontend-resilience-0827`，PR #1） |
+| 后端候选 Commit | 9b3a394（main） |
+| 测试时间 | 2026-08-28 |
+| 前端地址 | http://localhost:8080 |
+| 后端地址 | http://localhost:8000 |
+| run_id / trace_id |"run_id": "run-d35f5b23-a4ab-4f60-aded-5b211a462b32","trace_id": "trace-10752706-ce4f-4b7d-a4fa-c2262a6636b0"|
+| 数据性质 | real_xdr（正常）/ fixed_sample / fixed_sample_fallback / demo（降级） |
+
+---
+
+## 验证表格
+
+| 检查项 | 接口 | HTTP 状态 | 页面结果 | 是否使用 demo-data.js | 证据 |
+|---|---|---|---|---|---|
+| 事件列表 | GET /events | 200 | 正常显示，标签正确 | 否 | 01-events-network.png |
+| 事件详情 | GET /events/{id} | 200 | 正常显示 | 否 | 02-detail-network.png |
+| 时间线 | GET /events/{id}/timeline | 200 | 正常显示 | 否 | 03-timeline-network.png |
+| 指标 | GET /metrics | 200 | 正常显示 | 否 | 04-metrics-network.png |
+| 审批 | POST /events/{id}/approval | 200 | 成功，状态流转至 COMPLETED | 否 | 05-approval-network.png |
+| 最终状态 | — | — | COMPLETED | 否 | 06-completed-page.png |
+| 来源标签（固定样例） | GET /events | 200 | 显示"固定样例 / Mock 数据" | 否 | 07-source-tag.png |
+| 来源标签（真实数据） | GET /events | 200 | 显示"真实 XDR 数据" | 否 | 08-source-tag-real.png |
+| 空结果 | GET /events（空） | 200 | 显示"暂无事件数据" | 否 | 09-empty-list.png |
+| 鉴权失败 | GET /events | 401 | 提示登录失效 | 否 | 10-auth-fail.png |
+| 超时 / Fallback | GET /events | —（超时） | 显示演示数据 | 是 | 11-timeout-fallback.png |
+
+---
+
+## 截图证据
+
+存放路径：`docs/evidence/T0828-04/`
+
+| 序号 | 文件 | 说明 |
+|---|---|---|
+| 1 | 01-backend-commit.png | 后端 Commit 证明（`9b3a394`） |
+| 2 | 02-event-trace-id.png | 新运行事件的 event_id / run_id / trace_id |
+| 3 | 03-events-network.png | 事件列表接口 Network |
+| 4 | 04-completed-page.png | 事件最终状态 COMPLETED |
+| 5 | 05-source-tag.png | 来源标签（固定样例 ） |
+| 6 | 06-no-demo-degrade.png | Network 未触发演示降级（无 demo-data.js） |
+
+---
+
+## 来源标签判定规则
+
+| 后端 `source` / `sample_nature` | 页面显示 |
+|---|---|
+| `real_xdr` | 数据来源：真实 XDR 数据 |
+| `fixed_sample` | 数据来源：固定样例 |
+| `fixed_sample_fallback` | 数据来源：固定样例（回退） |
+| `demo` | 数据来源：演示数据 |
+| 前端降级（`usingDemo=true`，列表+指标均失败） | 数据来源：演示数据（前端降级） |
+| 无事件数据 | 数据来源：暂无事件数据 |
+
+---
+
+## 结论
+
+- **正常联调**：✅ 五接口（列表/详情/时间线/指标/审批）均返回 200，未触发演示数据，数据来源标识清晰。
+- **来源区分**：✅ 固定样例、真实 XDR、演示数据三类标签可正确识别，不再统一显示为"真实数据"。
+- **异常状态**：✅ 鉴权失败（401）、超时降级、空结果均可识别，未冒充真实数据。
+- **降级逻辑**：✅ 仅在列表与指标**均失败**时降级，且 Network 中可见 demo-data.js 加载。
+
+---
+
+## 已知问题
+
+无真实数据接入
+
+

@@ -13,88 +13,131 @@ const statusClass = (st)=>({COMPLETED:"b-completed",INVESTIGATING:"b-investigati
 const dotColor = (st)=>({done:"#22c55e",doing:"#eab308",failed:"#ef4444",pending:"#94a3b8"}[st]||"#94a3b8");
 
 let events = []; let metrics = null; let usingDemo = false;
+let backendAvailable = false; // 新增：标记后端是否曾经成功响应过
 
-// ===== 修改点：增加超时控制的 jfetch 函数 =====
+// ===== 改动点1：增加超时控制的 jfetch 函数 =====
 async function jfetch(url, timeoutMs = 10000){
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // 10秒后主动中断
-
   try{
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const r = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId); // 请求完成，清除定时器
-
-    if(!r.ok){
-      // 如果状态码是 401 或 403，弹出登录失效提示
-      if(r.status === 401 || r.status === 403){
-        alert('登录已失效，请重新登录');
-        return null;  // 返回 null 触发降级逻辑
-      }
-      throw new Error(r.status);
-    }
+    clearTimeout(timer);
+    if(!r.ok) throw new Error(r.status);
     return await r.json();
-  }catch(e){
-    clearTimeout(timeoutId); // 确保定时器被清除
-
+  }catch(e){ 
     // 超时错误特殊处理
-    if(e.name === 'AbortError'){
-      console.error('请求超时', url);
-      // 可以在这里弹出提示（如果需要）
-      // alert('请求超时，请稍后重试');
-      return null; // 返回 null 触发降级逻辑
+    if (e.name === 'AbortError') {
+      console.warn('请求超时:', url);
     }
-
-    // 网络错误或其他异常
-    console.error('请求失败', e);
-    return null;
+    return null; 
   }
 }
-// ===== 修改结束 =====
+// ===== 改动点1结束 =====
 
 function uuid(){ return crypto.randomUUID? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==="x"?r:(r&0x3|0x8)).toString(16);}); }
 
+// ===== 改动点2：修复 loadAll 降级逻辑 =====
 async function loadAll(){
+  // 重置标志
+  backendAvailable = false;
+  usingDemo = false;
+
   // 列表：仅当请求失败（返回 null）时才降级，否则使用后端数据（包括空数组）
   let list = await jfetch(API+"/events");
-  if(list === null){
-    list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary}));
-    usingDemo = true;
+  if(list !== null){
+    backendAvailable = true;
+    events = list;
   } else {
-    usingDemo = false;
+    // 列表失败，先不降级，等 metrics 结果
+    events = [];
   }
-  events = list;
-  renderList();
 
   // 指标：同样仅当请求失败时降级
   let m = await jfetch(API+"/metrics");
-  if(m === null){
+  if(m !== null){
+    backendAvailable = true;
+    metrics = m;
+  } else {
+    metrics = null;
+  }
+
+  // 如果两次都失败，才降级到演示数据
+  if (!backendAvailable) {
+    list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary}));
+    events = list;
+    renderList();
     m = window.DEMO_METRICS;
+    metrics = m;
+    renderMetrics();
     usingDemo = true;
   } else {
+    // 后端可用，但列表可能为空（空数组）
+    renderList();
+    renderMetrics();
     usingDemo = false;
   }
-  metrics = m;
-  renderMetrics();
 
+  // 更新来源标签（动态判断）
+  updateSourceTag();
+}
+// ===== 改动点2结束 =====
+
+// ===== 改动点3：来源标签动态化 =====
+function updateSourceTag() {
   const sourceTag = $("#source-tag");
-  if(sourceTag) {
-    sourceTag.textContent = usingDemo ? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：后端接口（真实数据）";
+  if(!sourceTag) return;
+
+  // 1. 前端演示数据（降级）
+  if (usingDemo) {
+    sourceTag.textContent = "数据来源：演示数据（前端降级）";
+    return;
+  }
+
+  // 2. 后端可用，根据第一条事件的 source 字段判断
+  const firstEvent = events && events.length > 0 ? events[0] : null;
+  if (!firstEvent) {
+    sourceTag.textContent = "数据来源：暂无事件数据";
+    return;
+  }
+
+  // 优先使用 sample_nature，若没有则用 source
+  const nature = firstEvent.sample_nature || firstEvent.source || "";
+
+  switch (nature) {
+    case "real_xdr":
+      sourceTag.textContent = "数据来源：真实 XDR 数据";
+      break;
+    case "fixed_sample":
+      sourceTag.textContent = "数据来源：固定样例";
+      break;
+    case "fixed_sample_fallback":
+      sourceTag.textContent = "数据来源：固定样例（回退）";
+      break;
+    case "demo":
+      sourceTag.textContent = "数据来源：演示数据";
+      break;
+    default:
+      // 未知来源，显示原始值
+      sourceTag.textContent = "数据来源：" + escapeHtml(nature);
+      break;
   }
 }
+// ===== 改动点3结束 =====
 
 function renderList(){
   const c = $("#event-list"); 
   if(!c) return;
   c.innerHTML="";
-  
-  // ===== 新增：空状态判断 =====
-  if(!events || events.length === 0){
-    c.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px 0;">暂无事件数据</div>';
+
+  // 空结果处理
+  if (!events || events.length === 0) {
+    c.innerHTML = '<div class="empty-state">暂无事件数据</div>';
     return;
   }
-  // ===== 新增结束 =====
-  
+
   events.forEach(ev=>{
     const row = document.createElement("div"); row.className="event-row";
+    row.dataset.id = ev.event_id; // 修复：添加 data-id 属性
     row.innerHTML = `
       <div>${escapeHtml(ev.event_id)}</div>
       <div style="font-size:10px;color:#94a3b8;">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
@@ -102,7 +145,7 @@ function renderList(){
       <div>${escapeHtml(ev.source||"")}</div>
       <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ev.summary||"")}">${escapeHtml(ev.summary||"")}</div>
       <div>${ev.status==="APPROVAL_REQUIRED"? '<button class="btn btn-danger" data-approve="'+escapeHtml(ev.event_id)+'">审批</button>' : ""}</div>`;
-    row.addEventListener("click",e=>{ if(e.target.dataset.approve){ openApprovalModal(e.target.dataset.approve); return; } renderDetail(e.target.dataset.id||ev.event_id); });
+    row.addEventListener("click",e=>{ if(e.target.dataset.approve){ openApprovalModal(e.target.dataset.approve); return; } renderDetail(ev.event_id); });
     c.appendChild(row);
   });
 }
@@ -114,12 +157,21 @@ function renderMetrics(){
     human: $("#kpi-human"),
     failed: $("#kpi-failed")
   };
-  if(kpis.total) kpis.total.textContent = metrics.total_events?? "--";
-  if(kpis.completed) kpis.completed.textContent = metrics.completed_events?? "--";
-  if(kpis.human) kpis.human.textContent = metrics.human_required_events?? "--";
-  if(kpis.failed) kpis.failed.textContent = metrics.failed_events?? "--";
+  if (!metrics) {
+    // 指标为空时显示 --
+    if(kpis.total) kpis.total.textContent = "--";
+    if(kpis.completed) kpis.completed.textContent = "--";
+    if(kpis.human) kpis.human.textContent = "--";
+    if(kpis.failed) kpis.failed.textContent = "--";
+    return;
+  }
+  if(kpis.total) kpis.total.textContent = metrics.total_events ?? "--";
+  if(kpis.completed) kpis.completed.textContent = metrics.completed_events ?? "--";
+  if(kpis.human) kpis.human.textContent = metrics.human_required_events ?? "--";
+  if(kpis.failed) kpis.failed.textContent = metrics.failed_events ?? "--";
 }
 
+// ===== 改动点4：修复 renderDetail 降级逻辑 =====
 async function renderDetail(id){
   // 保护：先检查元素是否存在
   const curTrace = $("#cur-trace");
@@ -127,10 +179,19 @@ async function renderDetail(id){
   
   let ctx = await jfetch(API+"/events/"+encodeURIComponent(id));
   if(!ctx){
+    // 后端可用时，不降级到演示数据，直接报错
+    if (backendAvailable) {
+      const detailBox = $("#detail");
+      if(detailBox) detailBox.innerHTML='<p class="placeholder">加载详情失败，请稍后重试</p>';
+      if(curTrace) curTrace.textContent = "--";
+      return;
+    }
+    // 后端完全不可用时，才尝试从演示数据中找
     ctx = window.DEMO_EVENTS.find(x=>x.event_id===id);
     if(!ctx){ 
       const detailBox = $("#detail");
       if(detailBox) detailBox.innerHTML='<p class="placeholder">未找到事件</p>'; 
+      if(curTrace) curTrace.textContent = "--";
       return; 
     }
   }
@@ -201,6 +262,7 @@ async function renderDetail(id){
   `;
   const ob = $("#open-approve"); if(ob) ob.addEventListener("click",()=>openApprovalModal(ctx.event_id));
 }
+// ===== 改动点4结束 =====
 
 /* ---------- 审批弹窗 ---------- */
 const modal = $("#approval-modal");
@@ -252,5 +314,20 @@ if(approvalForm) {
     }
   });
 }
+
+// 全局错误兜底
+window.onerror = function(msg, url, line, col, error) {
+  console.error('全局错误:', msg, error);
+  const app = $("#app");
+  if (app) {
+    app.innerHTML = `
+      <div class="error-fallback">
+        <h2>系统繁忙，请稍后重试</h2>
+        <p>${escapeHtml(msg)}</p>
+        <button onclick="location.reload()">重新加载</button>
+      </div>
+    `;
+  }
+};
 
 loadAll();
