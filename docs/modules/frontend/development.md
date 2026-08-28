@@ -136,3 +136,129 @@ GET http://127.0.0.1:8000/events
 | 日期 | PR/Commit | 实现变化 | 相关测试 |
 |---|---|---|---|
 | 2026-08-26 | spark-sec-agent-fe/main | 修改版本，记录前端联调实现 | 见 test.md |
+
+
+
+# T0827-04 开发说明
+
+## 1. 代码改动范围
+- 修改 `app.js`：重构请求逻辑，增加来源标签渲染、异常处理和降级判断。
+- 修改 `demo-data.js`：调整降级触发阈值，增加提示文案。
+
+## 2. 本地运行环境
+- **前端**：Python 3 内置服务 `python -m http.server 8080`
+- **后端**：Uvicorn `uvicorn sec_agent.api.app:app --reload --app-dir src` (端口 8000)
+
+## 3. 关键函数说明
+- `jfetch(url, options)`: 封装了 fetch，增加了 10s 超时控制和 try-catch。
+- `checkFallbackNeeded(response)`: 判断是否触发降级。
+- `renderSourceTag(sampleNature)`: 渲染来源标签。
+
+# T0828-04 开发说明
+
+## 一、代码改动范围
+
+### 1. `app.js`（前端核心逻辑）
+
+- **新增 `backendAvailable` 标志**：用于准确判断后端是否曾经成功响应，区分"后端可用但返回空"与"后端完全不可用"。
+- **修复 `loadAll` 降级逻辑**：只有 `/events` 与 `/metrics` **两个接口都失败**时才降级到 `demo-data.js`；任一成功即视为后端可用（包括返回空数组）。
+- **来源标签动态化（`updateSourceTag`）**：依据事件数据的 `sample_nature` / `source` 字段，将页面右上角标签区分为以下四类：
+  - `real_xdr` → 真实 XDR 数据
+  - `fixed_sample` → 固定样例
+  - `fixed_sample_fallback` → 固定样例（回退）
+  - `demo` → 演示数据
+  - 后端完全不可用时（`usingDemo=true`）→ 演示数据（前端降级）
+- **修复 `renderDetail` 降级逻辑**：后端可用时，详情接口失败只显示错误提示，不再静默使用演示数据；仅后端完全不可用时才回退到 `DEMO_EVENTS`。
+- **`jfetch` 增加 10 秒超时控制**：通过 `AbortController` 实现，超时后中断请求并返回 `null`，触发降级链路。
+- **`renderList` 修复点击事件**：为事件行元素显式设置 `data-id`，确保点击行任意区域均可打开详情。
+- **`renderMetrics` 空值保护**：`metrics` 为 `null` 时指标卡片显示 `--`，避免空指针报错。
+- **新增全局错误兜底（`window.onerror`）**：未捕获异常时显示"系统繁忙，请稍后重试"并提供重新加载入口，避免白屏。
+
+### 2. `demo-data.js`
+
+- 保持固定样例数据不变，作为后端不可用时的降级数据源。
+- 数据项中可包含 `sample_nature` / `source` 字段，用于前端标签判定（取值：`fixed_sample`、`demo` 等）。
+
+## 二、本地运行环境
+
+### 前端（端口 8080）
+
+```bash
+# 进入前端目录后使用内置静态服务器启动
+python -m http.server 8080
+```
+
+启动后访问：http://localhost:8080
+
+> 若 8080 端口被占用，可替换为其他端口（如 8081），并同步修改 `app.js` 中的 `API` 地址。
+
+### 后端（端口 8000）
+
+```bash
+#进入后端目录
+.\venv311\Scripts\activate
+uvicorn sec_agent.api.app:app --reload --app-dir src
+```
+
+启动成功后访问：http://localhost:8000
+交互式 API 文档（Swagger）：http://localhost:8000/docs
+
+### 关键版本
+
+- 前端 Commit：`01b42e6`（分支 `feature/frontend-resilience-0827`，PR #23）
+- 后端候选 Commit：`9b3a394`（`main`）
+- Python：3.11（`StrEnum`、`ZoneInfo` 等新特性依赖此版本）
+
+## 三、关键函数说明
+
+### 1. `jfetch(url, timeoutMs = 10000)`
+
+统一封装的 fetch 请求函数。
+
+- 通过 `AbortController` 实现 `timeoutMs` 毫秒超时控制。
+- 超时（`AbortError`）或网络异常时控制台告警并返回 `null`。
+- HTTP 非 2xx 状态直接抛出，由调用方统一判空处理。
+
+### 2. `loadAll()`
+
+页面初始化数据加载入口。
+
+- 依次请求 `/events` 与 `/metrics`，根据两者成败设置 `backendAvailable` 标志。
+- **双接口均失败**才降级到 `demo-data.js`；否则按真实数据渲染（允许空数组）。
+- 加载完成后调用 `updateSourceTag()` 刷新来源标签。
+
+### 3. `updateSourceTag()`
+
+来源标签动态判定函数（本轮核心改动）。
+
+- 依据首条事件的 `sample_nature`（优先）或 `source` 字段映射为对应文案。
+- 后端完全不可用时固定显示"演示数据（前端降级）"。
+- 未知来源显示原始值，避免让用户猜测。
+
+### 4. `checkFallbackNeeded()`
+
+判定是否需要降级（辅助函数）。
+
+- 综合 `backendAvailable` 与当前数据状态，返回布尔值。
+- 供 `loadAll` 及其他数据加载点复用，避免判定逻辑散落。
+
+### 5. `renderSourceTag()` / `renderDetail()` / `renderList()` / `renderMetrics()`
+
+- `renderSourceTag`：标签渲染的具体 DOM 操作（部分版本中与 `updateSourceTag` 合并）。
+- `renderDetail`：事件详情加载，后端可用时失败只提示、不静默降级。
+- `renderList`：事件列表渲染，含空状态与行点击事件绑定。
+- `renderMetrics`：指标卡片渲染，空值时显示 `--`。
+
+## 四、联调与验证要点
+
+1. **来源标签四态验证**：分别构造 `real_xdr`、`fixed_sample`、`fixed_sample_fallback`、`demo` 四种数据，确认标签文案准确切换（见 `test.md` 验证表格）。
+2. **降级触发条件**：仅当列表与指标接口**同时失败**（如后端未启动、超时）时才使用 `demo-data.js`；单个接口异常不触发降级。
+3. **Network 检查**：正常联调时确认**未加载** `demo-data.js`；只有后端完全不可用时才出现该请求。
+4. **版本对齐**：前后端须分别处于约定的 Commit（`01b42e6` / `9b3a394`），截图证据需标注 `run_id` / `trace_id` 以追溯同一条运行链。
+
+## 五、已知限制 / 后续事项
+
+- 未接入真实数据
+- 鉴权失败（401/403）当前为提示文案，尚未对接真实登录态跳转。
+- 批量事件中若存在来源混合（真实 + 样例），标签以首条事件为准，可能与个体实际来源不一致，后续可改为逐行标注。
+
