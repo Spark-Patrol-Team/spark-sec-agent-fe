@@ -262,3 +262,117 @@ uvicorn sec_agent.api.app:app --reload --app-dir src
 - 鉴权失败（401/403）当前为提示文案，尚未对接真实登录态跳转。
 - 批量事件中若存在来源混合（真实 + 样例），标签以首条事件为准，可能与个体实际来源不一致，后续可改为逐行标注。
 
+
+
+好的，以下是今天（2026-09-02）的 `development.md` 更新内容，仅包含 T0902 部分：
+
+---
+
+# T0902 开发说明
+
+## 一、代码改动范围
+
+### 1. `app.js`（前端核心逻辑）
+
+- **trace_id / run_id 悬停显示**：在 `renderList()` 中为每个事件行的 trace_id 所在 `<div>` 添加 `title` 属性，值为完整 trace_id；在 `renderDetail()` 中为详情页顶部展示的 trace_id / run_id 元素添加 `title` 属性，鼠标悬停即可查看完整值。
+- **审批联调完成**：`submitApproval` 函数已与后端 `POST /events/{id}/approval` 真实对接，返回 200 后刷新详情页，状态变更为 `COMPLETED`。
+- **来源标签逻辑完善**：在 `updateSourceTag()` 中增加判断：当事件列表中同时存在 `sample_nature=fixed_sample` 和 `sample_nature=real_xdr`（或 `source=xdr`）时，右上角标签统一显示“真实数据”。判定顺序：优先检查是否存在 `real_xdr` 或 `xdr` 来源，若存在则显示“真实数据”；否则按首条事件判定。
+- **修复来源标签显示**：之前 `renderSourceTag` 仅在首条事件为 `real_xdr` 时显示“真实 XDR 数据”，现在改为只要列表中存在 `xdr` 来源就显示“真实 XDR 数据”（与 T0828-04 设计一致）。
+
+### 2. `styles.css`
+
+- **无变更**：trace_id 悬停方案仅使用 `title` 属性，不修改 CSS 布局。
+
+### 3. `demo-data.js`
+
+- **无变更**：降级数据保持不变。
+
+## 二、本地运行环境
+
+### 前端（端口 8080）
+
+```bash
+python -m http.server 8080
+```
+
+启动后访问：http://localhost:8080
+
+> 若 8080 端口被占用，可替换为其他端口（如 8081），并同步修改 `app.js` 中的 `API` 地址。
+
+### 后端（远程服务器）
+
+**今日联调使用远程后端**，无需本地启动后端服务。前端 `app.js` 中 API 基址已配置为：
+
+```javascript
+const API = 'http://124.221.234.124';
+```
+
+> 注意：该地址为公网 IP，无端口号（默认 80）。若需本地调试，可自行启动后端（见下方备选说明）。
+
+**备选：本地启动后端（仅当需要本地调试时）**
+
+```bash
+.\venv311\Scripts\activate
+uvicorn sec_agent.api.app:app --reload --app-dir src
+```
+
+启动成功后访问：http://localhost:8000  
+交互式 API 文档（Swagger）：http://localhost:8000/docs
+
+> 若使用本地后端，需同步修改 `app.js` 中的 `API` 为 `http://127.0.0.1:8000`。
+
+### 关键版本
+
+- 前端 Commit：`416df76`
+- 后端：远程部署（IP `124.221.234.124`），对应后端 Commit 为 `0ea30c8`
+- Python：3.11（仅本地调试时需要）
+
+## 三、关键函数说明
+
+### 1. `renderList()` — trace_id 悬停
+
+在渲染事件列表的 trace_id 单元格时，除了设置文本内容外，额外设置 `title` 属性：
+
+```javascript
+// 伪代码示意
+let traceDiv = document.createElement('div');
+traceDiv.textContent = truncateTraceId(event.trace_id); // 显示截断值
+traceDiv.title = event.trace_id;                         // 悬停显示完整值
+```
+
+### 2. `renderDetail()` — run_id 悬停
+
+在详情页顶部展示 trace_id / run_id 的区域，同样添加 `title` 属性：
+
+```javascript
+document.getElementById('cur-trace').title = data.trace_id;
+document.getElementById('detail-run-id').title = data.run_id;
+```
+
+### 3. `updateSourceTag()` — 多来源共存判定
+
+新增逻辑：遍历 `events` 数组，若存在 `sample_nature === "real_xdr"` 或 `source === "xdr"` 的事件，则标签显示“真实 XDR 数据”；否则按首条事件判定。若同时存在 `fixed_sample` 和 `xdr`，仍然显示“真实 XDR 数据”。
+
+### 4. `submitApproval()` — 审批联调
+
+已通过真实接口 `POST /events/{id}/approval` 完成联调，请求体包含 `approved`、`approver`、`reason`、`idempotency_key`。响应 200 后调用 `refreshDetail()` 更新页面。
+
+## 四、联调与验证要点
+
+1. **trace_id 悬停验证**：鼠标悬浮在事件列表的 trace_id 列上，应出现完整 ID 的 tooltip。
+2. **审批联调验证**：选择状态为 `APPROVAL_REQUIRED` 的事件，点击“审批”按钮，填写表单（`approved=true`, `approver=111`），提交后状态变为 `COMPLETED`，处置记录显示 `stateful_mock_containment`。
+3. **来源标签验证**：后端返回的数据中包含 `source=xdr` 的事件时，右上角显示“真实 XDR 数据”；若同时存在 `fixed_sample` 和 `xdr`，仍显示“真实 XDR 数据”（按当前设计）。验收截图已确认该行为。
+4. **Network 检查**：正常联调时应看到 4 个 GET 请求（events、events/{id}、timeline、metrics）+ 1 个 POST 请求（approval），均为 200。请求目标地址应为 `124.221.234.124`。
+5. **截图验收**：10 张截图已全部截取，覆盖 commit、trace_id 悬停、来源标签、审批前后、Network、处置记录、无降级证据、边界文字。
+
+## 五、已知限制 / 后续事项
+
+| 优先级 | 事项 | 是否影响主链 | 负责人/完成条件 |
+|---|---|---|---|
+| P1 | trace_id 列未实现自动换行，仅靠悬停查看完整 ID | 否（体验优化） | 可考虑调整 Grid 列宽或使用 `text-overflow: ellipsis` + `title` 组合 |
+| P1 | 当 `fixed_sample` 和 `xdr` 来源同时存在时，来源标签统一显示“真实数据”，可能让用户误以为全部为真实数据 | 否（当前设计如此） | 需与产品/验收方确认最终文案；如需精确区分，应改为逐行标注来源或在标签中增加数量说明 |
+
+
+
+
+

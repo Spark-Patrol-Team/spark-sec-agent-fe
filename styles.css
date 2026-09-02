@@ -51,3 +51,49 @@ header{position:fixed;top:0;left:0;width:100%;height:52px;background:#0b1220;bor
 .form-hint{font-size:11px;color:var(--muted);margin-top:3px;}
 .modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line);}
 .tag{font-size:10px;padding:1px 6px;border-radius:3px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;margin-left:6px;}
+
+/* ── 新增：支持证据折叠列表样式 ── */
+.evidence-list {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+  word-break: break-all;       /* 强制长告警ID换行 */
+}
+.evidence-list details {
+  margin-top: 4px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.evidence-list li {
+  margin-bottom: 2px;
+  word-break: break-all;
+}
+
+/* ── 新增：调查证据链参数/观察长文本换行 ── */
+.detail-box .item .tl-meta code,
+.detail-box .item .tl-meta pre {
+  white-space: pre-wrap;       /* 保留空格并自动换行 */
+  word-break: break-all;
+  font-family: monospace;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 4px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* ── ★ 强化换行：直接命中 details/summary/li，不依赖类名 ── */
+details, summary, details li {
+  word-break: break-all !important;
+  overflow-wrap: break-word !important;
+  white-space: normal !important;
+}
+summary {
+  cursor: pointer;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+details li {
+  margin-bottom: 2px;
+  color: #94a3b8;
+}

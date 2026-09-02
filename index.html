@@ -5,11 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>安全智能体系统 · 运营看板</title>
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* 支持证据折叠列表样式 */
+  .evidence-list {
+    margin: 4px 0 0 0;
+    padding-left: 20px;
+    word-break: break-all;
+  }
+  .evidence-list details {
+    margin-top: 4px;
+    color: #94a3b8;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
 <header>
   <div class="brand">安全智能体系统 <span class="sub">· 运营看板</span></div>
-  <div class="source-tag" id="source-tag">数据来源：演示数据（后端未启动，已自动降级）</div>
+  <div class="source-tag" id="source-tag">数据来源：加载中…</div>
 </header>
 
 <div class="container">
@@ -40,13 +53,14 @@
   </div>
 
   <!-- 右侧详情 -->
-<div class="right-panel">
-  <div class="card-head">
-    <h3>事件详情 / 可审计处理时间线</h3>
-  </div>
-  <div id="detail" class="detail-box">
-    <p class="placeholder">点击左侧事件查看详情…</p>
-    <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
+  <div class="right-panel">
+    <div class="card-head">
+      <h3>事件详情 / 可审计处理时间线</h3>
+    </div>
+    <div id="detail" class="detail-box">
+      <p class="placeholder">点击左侧事件查看详情…</p>
+      <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
+    </div>
   </div>
 </div>
 

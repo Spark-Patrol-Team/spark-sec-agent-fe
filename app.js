@@ -6,7 +6,7 @@
 // GET  /events/{event_id}/timeline -> list[TimelineEntry]
 // POST /events/{event_id}/approval -> ApprovalDecision {approved,approver,reason,idempotency_key}
 // GET  /metrics -> {total_events,completed_events,human_required_events,failed_events,note}
-const API = "http://localhost:8000";
+const API = 'http://124.221.234.124';
 const $ = (s)=>document.querySelector(s);
 const escapeHtml = (s)=> String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const statusClass = (st)=>({COMPLETED:"b-completed",INVESTIGATING:"b-investigating",APPROVAL_REQUIRED:"b-approval",FAILED:"b-failed",HUMAN_REQUIRED:"b-human"}[st]||"");
@@ -93,20 +93,26 @@ function updateSourceTag() {
     return;
   }
 
-  // 2. 后端可用，根据第一条事件的 source 字段判断
-  const firstEvent = events && events.length > 0 ? events[0] : null;
-  if (!firstEvent) {
+  // 2. 后端可用，遍历所有事件判断来源
+  if (!events || events.length === 0) {
     sourceTag.textContent = "数据来源：暂无事件数据";
     return;
   }
 
-  // 优先使用 sample_nature，若没有则用 source
-  const nature = firstEvent.sample_nature || firstEvent.source || "";
+  // 遍历列表，检查是否有真实数据
+  const hasRealXdr = events.some(ev => {
+    const nature = ev.sample_nature || ev.source || "";
+    return nature === "real_xdr" || nature === "xdr";
+  });
 
-  switch (nature) {
-    case "real_xdr":
-      sourceTag.textContent = "数据来源：真实 XDR 数据";
-      break;
+  if (hasRealXdr) {
+    sourceTag.textContent = "数据来源：真实 XDR 数据";
+    return;
+  }
+
+  // 没有真实数据，按第一条事件的来源显示
+  const firstNature = events[0].sample_nature || events[0].source || "";
+  switch (firstNature) {
     case "fixed_sample":
       sourceTag.textContent = "数据来源：固定样例";
       break;
@@ -117,8 +123,7 @@ function updateSourceTag() {
       sourceTag.textContent = "数据来源：演示数据";
       break;
     default:
-      // 未知来源，显示原始值
-      sourceTag.textContent = "数据来源：" + escapeHtml(nature);
+      sourceTag.textContent = "数据来源：" + escapeHtml(firstNature);
       break;
   }
 }
@@ -140,7 +145,7 @@ function renderList(){
     row.dataset.id = ev.event_id; // 修复：添加 data-id 属性
     row.innerHTML = `
       <div>${escapeHtml(ev.event_id)}</div>
-      <div style="font-size:10px;color:#94a3b8;">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
+      <div style="font-size:10px;color:#94a3b8;" title="${escapeHtml(ev.trace_id||"")}">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
       <div><span class="badge ${statusClass(ev.status)}">${escapeHtml(ev.status)}</span></div>
       <div>${escapeHtml(ev.source||"")}</div>
       <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ev.summary||"")}">${escapeHtml(ev.summary||"")}</div>
@@ -196,7 +201,10 @@ async function renderDetail(id){
     }
   }
   
-  if(curTrace) curTrace.textContent = ctx.trace_id||"--";
+  if(curTrace) {
+    curTrace.textContent = ctx.trace_id||"--";
+    curTrace.title = ctx.trace_id||"--";
+  }
   
   const box = $("#detail");
   if(!box) return;
@@ -227,7 +235,20 @@ async function renderDetail(id){
     ${tri? `<div class="item"><div class="dot" style="background:#22c55e"></div><div>
       <div class="tl-title">verdict=${escapeHtml(tri.verdict)} · risk_score=${tri.risk_score} · priority=${escapeHtml(tri.priority)}<span class="tag">confidence=${tri.confidence}</span></div>
       <div class="tl-meta">${escapeHtml(tri.summary||"")}</div>
-      <div class="tl-meta">支持证据：${escapeHtml((tri.supporting_evidence_refs||[]).join("；"))||"无"}</div>
+      <div class="tl-meta">支持证据：${(() => {
+  const evidences = tri.supporting_evidence_refs || [];
+  if (evidences.length === 0) return "无";
+  const displayCount = 3;
+  const visibleEvidences = evidences.slice(0, displayCount).map(function(e) { return "<li>" + escapeHtml(e) + "</li>"; }).join("");
+  const hiddenEvidences = evidences.slice(displayCount).map(function(e) { return "<li>" + escapeHtml(e) + "</li>"; }).join("");
+  let html = "<ul class=\"evidence-list\">" + visibleEvidences;
+  if (hiddenEvidences) {
+    html += "<details><summary>展开剩余 " + (evidences.length - displayCount) + " 条证据</summary>" + hiddenEvidences + "</ul></details>";
+  } else {
+    html += "</ul>";
+  }
+  return html;
+})()}</div>
       <div class="tl-meta">反对证据：${escapeHtml((tri.opposing_evidence_refs||[]).join("；"))||"无"}</div>
     </div></div>`:'<div class="tl-meta">无 triage 结果</div>'}
 
