@@ -6,62 +6,146 @@
 // GET  /events/{event_id}/timeline -> list[TimelineEntry]
 // POST /events/{event_id}/approval -> ApprovalDecision {approved,approver,reason,idempotency_key}
 // GET  /metrics -> {total_events,completed_events,human_required_events,failed_events,note}
-const API = "http://localhost:8000";
+const API = 'http://124.221.234.124';
 const $ = (s)=>document.querySelector(s);
 const escapeHtml = (s)=> String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const statusClass = (st)=>({COMPLETED:"b-completed",INVESTIGATING:"b-investigating",APPROVAL_REQUIRED:"b-approval",FAILED:"b-failed",HUMAN_REQUIRED:"b-human"}[st]||"");
 const dotColor = (st)=>({done:"#22c55e",doing:"#eab308",failed:"#ef4444",pending:"#94a3b8"}[st]||"#94a3b8");
 
 let events = []; let metrics = null; let usingDemo = false;
+let backendAvailable = false; // 新增：标记后端是否曾经成功响应过
 
-async function jfetch(url){
+// ===== 改动点1：增加超时控制的 jfetch 函数 =====
+async function jfetch(url, timeoutMs = 10000){
   try{
-    const r = await fetch(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
     if(!r.ok) throw new Error(r.status);
     return await r.json();
-  }catch(e){ return null; }
+  }catch(e){ 
+    // 超时错误特殊处理
+    if (e.name === 'AbortError') {
+      console.warn('请求超时:', url);
+    }
+    return null; 
+  }
 }
+// ===== 改动点1结束 =====
 
 function uuid(){ return crypto.randomUUID? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==="x"?r:(r&0x3|0x8)).toString(16);}); }
 
+// ===== 改动点2：修复 loadAll 降级逻辑 =====
 async function loadAll(){
+  // 重置标志
+  backendAvailable = false;
+  usingDemo = false;
+
   // 列表：仅当请求失败（返回 null）时才降级，否则使用后端数据（包括空数组）
   let list = await jfetch(API+"/events");
-  if(list === null){
-    list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary}));
-    usingDemo = true;
+  if(list !== null){
+    backendAvailable = true;
+    events = list;
   } else {
-    usingDemo = false;
+    // 列表失败，先不降级，等 metrics 结果
+    events = [];
   }
-  events = list;
-  renderList();
 
   // 指标：同样仅当请求失败时降级
   let m = await jfetch(API+"/metrics");
-  if(m === null){
+  if(m !== null){
+    backendAvailable = true;
+    metrics = m;
+  } else {
+    metrics = null;
+  }
+
+  // 如果两次都失败，才降级到演示数据
+  if (!backendAvailable) {
+    list = window.DEMO_EVENTS.map(e=>({event_id:e.event_id,run_id:e.run_id,trace_id:e.trace_id,status:e.status,source:e.source,summary:e.summary}));
+    events = list;
+    renderList();
     m = window.DEMO_METRICS;
+    metrics = m;
+    renderMetrics();
     usingDemo = true;
   } else {
+    // 后端可用，但列表可能为空（空数组）
+    renderList();
+    renderMetrics();
     usingDemo = false;
   }
-  metrics = m;
-  renderMetrics();
 
+  // 更新来源标签（动态判断）
+  updateSourceTag();
+}
+// ===== 改动点2结束 =====
+
+// ===== 改动点3：来源标签动态化 =====
+function updateSourceTag() {
   const sourceTag = $("#source-tag");
-  if(sourceTag) {
-    sourceTag.textContent = usingDemo ? "数据来源：演示数据（后端未启动，已自动降级）" : "数据来源：后端接口（真实数据）";
+  if(!sourceTag) return;
+
+  // 1. 前端演示数据（降级）
+  if (usingDemo) {
+    sourceTag.textContent = "数据来源：演示数据（前端降级）";
+    return;
+  }
+
+  // 2. 后端可用，遍历所有事件判断来源
+  if (!events || events.length === 0) {
+    sourceTag.textContent = "数据来源：暂无事件数据";
+    return;
+  }
+
+  // 遍历列表，检查是否有真实数据
+  const hasRealXdr = events.some(ev => {
+    const nature = ev.sample_nature || ev.source || "";
+    return nature === "real_xdr" || nature === "xdr";
+  });
+
+  if (hasRealXdr) {
+    sourceTag.textContent = "数据来源：真实 XDR 数据";
+    return;
+  }
+
+  // 没有真实数据，按第一条事件的来源显示
+  const firstNature = events[0].sample_nature || events[0].source || "";
+  switch (firstNature) {
+    case "fixed_sample":
+      sourceTag.textContent = "数据来源：固定样例";
+      break;
+    case "fixed_sample_fallback":
+      sourceTag.textContent = "数据来源：固定样例（回退）";
+      break;
+    case "demo":
+      sourceTag.textContent = "数据来源：演示数据";
+      break;
+    default:
+      sourceTag.textContent = "数据来源：" + escapeHtml(firstNature);
+      break;
   }
 }
+// ===== 改动点3结束 =====
 
 function renderList(){
   const c = $("#event-list"); 
   if(!c) return;
   c.innerHTML="";
+
+  // 空结果处理
+  if (!events || events.length === 0) {
+    c.innerHTML = '<div class="empty-state">暂无事件数据</div>';
+    return;
+  }
+
   events.forEach(ev=>{
     const row = document.createElement("div"); row.className="event-row";
+    row.dataset.id = ev.event_id; // 修复：添加 data-id 属性
     row.innerHTML = `
       <div>${escapeHtml(ev.event_id)}</div>
-      <div style="font-size:10px;color:#94a3b8;">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
+      <div style="font-size:10px;color:#94a3b8;" title="${escapeHtml(ev.trace_id||"")}">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
       <div><span class="badge ${statusClass(ev.status)}">${escapeHtml(ev.status)}</span></div>
       <div>${escapeHtml(ev.source||"")}</div>
       <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ev.summary||"")}">${escapeHtml(ev.summary||"")}</div>
@@ -78,12 +162,21 @@ function renderMetrics(){
     human: $("#kpi-human"),
     failed: $("#kpi-failed")
   };
-  if(kpis.total) kpis.total.textContent = metrics.total_events?? "--";
-  if(kpis.completed) kpis.completed.textContent = metrics.completed_events?? "--";
-  if(kpis.human) kpis.human.textContent = metrics.human_required_events?? "--";
-  if(kpis.failed) kpis.failed.textContent = metrics.failed_events?? "--";
+  if (!metrics) {
+    // 指标为空时显示 --
+    if(kpis.total) kpis.total.textContent = "--";
+    if(kpis.completed) kpis.completed.textContent = "--";
+    if(kpis.human) kpis.human.textContent = "--";
+    if(kpis.failed) kpis.failed.textContent = "--";
+    return;
+  }
+  if(kpis.total) kpis.total.textContent = metrics.total_events ?? "--";
+  if(kpis.completed) kpis.completed.textContent = metrics.completed_events ?? "--";
+  if(kpis.human) kpis.human.textContent = metrics.human_required_events ?? "--";
+  if(kpis.failed) kpis.failed.textContent = metrics.failed_events ?? "--";
 }
 
+// ===== 改动点4：修复 renderDetail 降级逻辑 =====
 async function renderDetail(id){
   // 保护：先检查元素是否存在
   const curTrace = $("#cur-trace");
@@ -91,15 +184,27 @@ async function renderDetail(id){
   
   let ctx = await jfetch(API+"/events/"+encodeURIComponent(id));
   if(!ctx){
+    // 后端可用时，不降级到演示数据，直接报错
+    if (backendAvailable) {
+      const detailBox = $("#detail");
+      if(detailBox) detailBox.innerHTML='<p class="placeholder">加载详情失败，请稍后重试</p>';
+      if(curTrace) curTrace.textContent = "--";
+      return;
+    }
+    // 后端完全不可用时，才尝试从演示数据中找
     ctx = window.DEMO_EVENTS.find(x=>x.event_id===id);
     if(!ctx){ 
       const detailBox = $("#detail");
       if(detailBox) detailBox.innerHTML='<p class="placeholder">未找到事件</p>'; 
+      if(curTrace) curTrace.textContent = "--";
       return; 
     }
   }
   
-  if(curTrace) curTrace.textContent = ctx.trace_id||"--";
+  if(curTrace) {
+    curTrace.textContent = ctx.trace_id||"--";
+    curTrace.title = ctx.trace_id||"--";
+  }
   
   const box = $("#detail");
   if(!box) return;
@@ -130,7 +235,20 @@ async function renderDetail(id){
     ${tri? `<div class="item"><div class="dot" style="background:#22c55e"></div><div>
       <div class="tl-title">verdict=${escapeHtml(tri.verdict)} · risk_score=${tri.risk_score} · priority=${escapeHtml(tri.priority)}<span class="tag">confidence=${tri.confidence}</span></div>
       <div class="tl-meta">${escapeHtml(tri.summary||"")}</div>
-      <div class="tl-meta">支持证据：${escapeHtml((tri.supporting_evidence_refs||[]).join("；"))||"无"}</div>
+      <div class="tl-meta">支持证据：${(() => {
+  const evidences = tri.supporting_evidence_refs || [];
+  if (evidences.length === 0) return "无";
+  const displayCount = 3;
+  const visibleEvidences = evidences.slice(0, displayCount).map(function(e) { return "<li>" + escapeHtml(e) + "</li>"; }).join("");
+  const hiddenEvidences = evidences.slice(displayCount).map(function(e) { return "<li>" + escapeHtml(e) + "</li>"; }).join("");
+  let html = "<ul class=\"evidence-list\">" + visibleEvidences;
+  if (hiddenEvidences) {
+    html += "<details><summary>展开剩余 " + (evidences.length - displayCount) + " 条证据</summary>" + hiddenEvidences + "</ul></details>";
+  } else {
+    html += "</ul>";
+  }
+  return html;
+})()}</div>
       <div class="tl-meta">反对证据：${escapeHtml((tri.opposing_evidence_refs||[]).join("；"))||"无"}</div>
     </div></div>`:'<div class="tl-meta">无 triage 结果</div>'}
 
@@ -165,6 +283,7 @@ async function renderDetail(id){
   `;
   const ob = $("#open-approve"); if(ob) ob.addEventListener("click",()=>openApprovalModal(ctx.event_id));
 }
+// ===== 改动点4结束 =====
 
 /* ---------- 审批弹窗 ---------- */
 const modal = $("#approval-modal");
@@ -216,5 +335,20 @@ if(approvalForm) {
     }
   });
 }
+
+// 全局错误兜底
+window.onerror = function(msg, url, line, col, error) {
+  console.error('全局错误:', msg, error);
+  const app = $("#app");
+  if (app) {
+    app.innerHTML = `
+      <div class="error-fallback">
+        <h2>系统繁忙，请稍后重试</h2>
+        <p>${escapeHtml(msg)}</p>
+        <button onclick="location.reload()">重新加载</button>
+      </div>
+    `;
+  }
+};
 
 loadAll();
