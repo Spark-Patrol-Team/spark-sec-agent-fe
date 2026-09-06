@@ -6,7 +6,19 @@
 // GET  /events/{event_id}/timeline -> list[TimelineEntry]
 // POST /events/{event_id}/approval -> ApprovalDecision {approved,approver,reason,idempotency_key}
 // GET  /metrics -> {total_events,completed_events,human_required_events,failed_events,note}
-const API = 'http://124.221.234.124';
+
+// ===== 改动点1：API 地址配置化 =====
+const API = (function(){
+  // 优先级：window.__APP_CONFIG__.API > meta[name="api-base"] > 默认本地
+  if (window.__APP_CONFIG__ && window.__APP_CONFIG__.API) {
+    return window.__APP_CONFIG__.API;
+  }
+  const meta = document.querySelector('meta[name="api-base"]');
+  if (meta) return meta.getAttribute('content');
+  return 'http://127.0.0.1:8000'; // 默认本地
+})();
+// ===== 改动点1结束 =====
+
 const $ = (s)=>document.querySelector(s);
 const escapeHtml = (s)=> String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const statusClass = (st)=>({COMPLETED:"b-completed",INVESTIGATING:"b-investigating",APPROVAL_REQUIRED:"b-approval",FAILED:"b-failed",HUMAN_REQUIRED:"b-human"}[st]||"");
@@ -15,7 +27,7 @@ const dotColor = (st)=>({done:"#22c55e",doing:"#eab308",failed:"#ef4444",pending
 let events = []; let metrics = null; let usingDemo = false;
 let backendAvailable = false; // 新增：标记后端是否曾经成功响应过
 
-// ===== 改动点1：增加超时控制的 jfetch 函数 =====
+// ===== 改动点2：增加超时控制的 jfetch 函数 =====
 async function jfetch(url, timeoutMs = 10000){
   try{
     const controller = new AbortController();
@@ -32,11 +44,11 @@ async function jfetch(url, timeoutMs = 10000){
     return null; 
   }
 }
-// ===== 改动点1结束 =====
+// ===== 改动点2结束 =====
 
 function uuid(){ return crypto.randomUUID? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==="x"?r:(r&0x3|0x8)).toString(16);}); }
 
-// ===== 改动点2：修复 loadAll 降级逻辑 =====
+// ===== 改动点3：修复 loadAll 降级逻辑 =====
 async function loadAll(){
   // 重置标志
   backendAvailable = false;
@@ -80,54 +92,53 @@ async function loadAll(){
   // 更新来源标签（动态判断）
   updateSourceTag();
 }
-// ===== 改动点2结束 =====
+// ===== 改动点3结束 =====
 
-// ===== 改动点3：来源标签动态化 =====
+// ===== 改动点4：来源标签逐条显示 + 混合数据具体构成 =====
+function countSources() {
+  const counts = {};
+  if (!events || events.length === 0) return counts;
+  events.forEach(ev => {
+    const s = ev.source || ev.sample_nature || '';
+    // 统一别名：real_xdr / xdr 归为 "真实XDR"
+    const key = (s === 'real_xdr' || s === 'xdr') ? '真实XDR'
+              : (s === 'fixed_sample') ? '固定样例'
+              : (s === 'fixed_sample_fallback') ? '固定样例（回退）'
+              : (s === 'demo') ? '演示数据'
+              : s;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function summarySourceTag(counts) {
+  const keys = Object.keys(counts);
+  if (keys.length === 0) return "暂无事件数据";
+  if (keys.length === 1) {
+    const k = keys[0];
+    const n = counts[k];
+    if (k === '真实XDR') return `数据来源：真实 XDR 数据（${n}条）`;
+    if (k === '固定样例') return `数据来源：固定样例（${n}条）`;
+    if (k === '固定样例（回退）') return `数据来源：固定样例（回退）（${n}条）`;
+    if (k === '演示数据') return `数据来源：演示数据（${n}条）`;
+    return `数据来源：${k}（${n}条）`;
+  }
+  // 混合来源：显示具体构成
+  const parts = keys.map(k => `${k} ${counts[k]}条`).join(' + ');
+  return `数据来源：${parts}`;
+}
+
 function updateSourceTag() {
   const sourceTag = $("#source-tag");
   if(!sourceTag) return;
-
-  // 1. 前端演示数据（降级）
   if (usingDemo) {
     sourceTag.textContent = "数据来源：演示数据（前端降级）";
     return;
   }
-
-  // 2. 后端可用，遍历所有事件判断来源
-  if (!events || events.length === 0) {
-    sourceTag.textContent = "数据来源：暂无事件数据";
-    return;
-  }
-
-  // 遍历列表，检查是否有真实数据
-  const hasRealXdr = events.some(ev => {
-    const nature = ev.sample_nature || ev.source || "";
-    return nature === "real_xdr" || nature === "xdr";
-  });
-
-  if (hasRealXdr) {
-    sourceTag.textContent = "数据来源：真实 XDR 数据";
-    return;
-  }
-
-  // 没有真实数据，按第一条事件的来源显示
-  const firstNature = events[0].sample_nature || events[0].source || "";
-  switch (firstNature) {
-    case "fixed_sample":
-      sourceTag.textContent = "数据来源：固定样例";
-      break;
-    case "fixed_sample_fallback":
-      sourceTag.textContent = "数据来源：固定样例（回退）";
-      break;
-    case "demo":
-      sourceTag.textContent = "数据来源：演示数据";
-      break;
-    default:
-      sourceTag.textContent = "数据来源：" + escapeHtml(firstNature);
-      break;
-  }
+  const counts = countSources();
+  sourceTag.textContent = summarySourceTag(counts);
 }
-// ===== 改动点3结束 =====
+// ===== 改动点4结束 =====
 
 function renderList(){
   const c = $("#event-list"); 
@@ -147,7 +158,7 @@ function renderList(){
       <div>${escapeHtml(ev.event_id)}</div>
       <div style="font-size:10px;color:#94a3b8;" title="${escapeHtml(ev.trace_id||"")}">${escapeHtml((ev.trace_id||"").slice(0,10))}…</div>
       <div><span class="badge ${statusClass(ev.status)}">${escapeHtml(ev.status)}</span></div>
-      <div>${escapeHtml(ev.source||"")}</div>
+      <div class="src-cell">${escapeHtml(ev.source||"")}</div>
       <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ev.summary||"")}">${escapeHtml(ev.summary||"")}</div>
       <div>${ev.status==="APPROVAL_REQUIRED"? '<button class="btn btn-danger" data-approve="'+escapeHtml(ev.event_id)+'">审批</button>' : ""}</div>`;
     row.addEventListener("click",e=>{ if(e.target.dataset.approve){ openApprovalModal(e.target.dataset.approve); return; } renderDetail(ev.event_id); });
@@ -176,7 +187,7 @@ function renderMetrics(){
   if(kpis.failed) kpis.failed.textContent = metrics.failed_events ?? "--";
 }
 
-// ===== 改动点4：修复 renderDetail 降级逻辑 =====
+// ===== 改动点5：修复 renderDetail 降级逻辑 =====
 async function renderDetail(id){
   // 保护：先检查元素是否存在
   const curTrace = $("#cur-trace");
@@ -283,7 +294,7 @@ async function renderDetail(id){
   `;
   const ob = $("#open-approve"); if(ob) ob.addEventListener("click",()=>openApprovalModal(ctx.event_id));
 }
-// ===== 改动点4结束 =====
+// ===== 改动点5结束 =====
 
 /* ---------- 审批弹窗 ---------- */
 const modal = $("#approval-modal");
@@ -325,14 +336,20 @@ if(approvalForm) {
         body:JSON.stringify(body) 
       }); 
     } catch(err){ res=null; }
+
+    // ===== 改动点6：审批失败时明确显示“审批未提交、未生效” =====
     if(res && res.ok){ 
-      alert("审批已提交（真实接口）"); 
+      alert("✅ 审批已提交并生效"); 
       closeApprovalModal(); 
       renderDetail(id); 
-    } else { 
-      alert("后端不可用，已按演示模式记录审批（不会真实生效）\n\n"+JSON.stringify(body,null,2)); 
-      closeApprovalModal(); 
+    } else if (res && !res.ok) {
+      alert("❌ 审批未提交、未生效（接口返回状态 " + res.status + "）\n\n请检查审批参数或联系管理员"); 
+      closeApprovalModal();
+    } else {
+      alert("❌ 审批未提交、未生效（网络不可达）\n\n请确认后端服务是否正常运行"); 
+      closeApprovalModal();
     }
+    // ===== 改动点6结束 =====
   });
 }
 
