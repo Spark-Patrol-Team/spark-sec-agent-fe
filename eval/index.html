@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知识增强 A/B 评测 · 安全智能体</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* 强制清除旧主页可能带来的样式污染 */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0b0e17;
+      color: #e0e0e0;
+      overflow-x: hidden;
+    }
+    /* 隐藏任何可能从旧页面残留的搜索框 */
+    input.search-box,
+    div.header-search,
+    div#search-wrapper,
+    .search-container {
+      display: none !important;
+    }
+    /* 确保弹窗遮罩默认隐藏 */
+    .modal-mask[hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🛡️ 安全智能体系统</div>
+    <div class="page-title">知识增强 A/B 评测展示</div>
+    <div class="meta">
+      <span id="data-source" class="badge badge-info">数据来源：加载中…</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 全局统计 -->
+    <section class="summary-bar" id="summary-bar">
+      <div class="sum-item"><span class="sum-num" id="sum-cases">0</span><span class="sum-label">评测案例</span></div>
+      <div class="sum-item"><span class="sum-num" id="sum-webshell">0</span><span class="sum-label">WebShell 知识被拒</span></div>
+      <div class="sum-item"><span class="sum-num" id="sum-unsub">0</span><span class="sum-label">无依据结论</span></div>
+      <div class="sum-item"><span class="sum-num" id="sum-human">0</span><span class="sum-label">人工接管</span></div>
+    </section>
+
+    <!-- 案例列表 -->
+    <section class="case-list" id="case-list">
+      <p class="placeholder">正在加载评测数据…</p>
+    </section>
+  </main>
+
+  <!-- 详情弹窗 -->
+  <div class="modal-mask" id="modal-mask" hidden>
+    <div class="modal">
+      <button class="modal-close" id="modal-close">✕</button>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

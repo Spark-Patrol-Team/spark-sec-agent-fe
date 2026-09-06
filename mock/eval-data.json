@@ -1,0 +1,566 @@
+[
+  {
+    "case_id": "case-001",
+    "event_id": "evt-webshell-001",
+    "title": "WebShell 告警：可疑 PowerShell 执行",
+    "description": "主机 192.168.1.100 发现未知 PowerShell 进程，疑似 WebShell 后门行为",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少进程父链信息", "缺少网络外连目标情报"],
+        "tool_calls": [
+          {
+            "tool_name": "进程树分析",
+            "status": "not_called",
+            "result": null,
+            "category": "tool"
+          },
+          {
+            "tool_name": "威胁情报查询",
+            "status": "not_called",
+            "result": null,
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "未检测到明显恶意行为，建议人工确认",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 1800,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 1,
+        "notes": "误判风险：未引用任何知识库，漏判概率较高"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-WEBSHELL-042",
+            "source": "webshell_knowledge_base",
+            "title": "PowerShell 反弹 Shell 检测规则",
+            "relevance_score": 0.92,
+            "category": "knowledge"
+          },
+          {
+            "id": "RULE-PROC-117",
+            "source": "internal_rules",
+            "title": "异常进程链分析规则",
+            "relevance_score": 0.85,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-proc-001",
+            "kind": "event",
+            "label": "进程创建事件 4624",
+            "detail": "PID 8848 由 w3wp.exe 创建"
+          },
+          {
+            "id": "tool-vt-001",
+            "kind": "tool",
+            "label": "VirusTotal 查询结果",
+            "detail": "SHA256: abc123... 关联已知恶意家族"
+          },
+          {
+            "id": "KB-WEBSHELL-042",
+            "kind": "knowledge",
+            "label": "知识库：PowerShell 反弹 Shell 检测规则",
+            "detail": "匹配规则：检测到 powershell -enc 参数与可疑 IP 外连"
+          }
+        ],
+        "evidence_gaps": [],
+        "tool_calls": [
+          {
+            "tool_name": "进程树分析",
+            "status": "called",
+            "result": {
+              "parent_process": "w3wp.exe",
+              "grandparent": "IIS Worker Process",
+              "cmdline": "powershell -enc SQBFAFgAKABOAGUAd..."
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "威胁情报查询",
+            "status": "called",
+            "result": {
+              "destination_ip": "185.220.101.x",
+              "reputation": "malicious",
+              "tags": ["c2", "webshell"]
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "命中 WebShell 知识库 KB-WEBSHELL-042，结合威胁情报确认为 C2 通信",
+        "prohibited_conclusion": true,
+        "human_intervention_required": true,
+        "processing_time_ms": 4200,
+        "web_shell_rejected_count": 1,
+        "unsubstantiated_statements_count": 0,
+        "notes": "正确阻断，知识库有效降低了误判率"
+      }
+    }
+  },
+  {
+    "case_id": "case-002",
+    "event_id": "evt-lateral-002",
+    "title": "横向移动告警：SMB 异常连接",
+    "description": "内网主机 10.10.10.5 向多台主机发起 SMB 连接，疑似横向扩散",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少连接时序分析", "缺少账户认证日志"],
+        "tool_calls": [
+          {
+            "tool_name": "SMB 会话分析",
+            "status": "not_called",
+            "result": null,
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "SMB 连接数量较少，未触发阈值",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 1500,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 2,
+        "notes": "漏判：未关联横向移动知识库，低估了风险"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-LATERAL-023",
+            "source": "attack_pattern_base",
+            "title": "SMB 横向移动检测模式",
+            "relevance_score": 0.88,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-auth-003",
+            "kind": "event",
+            "label": "登录事件 4624（多次）",
+            "detail": "源 10.10.10.5 → 目标 10.10.10.6~10 共 5 次"
+          },
+          {
+            "id": "KB-LATERAL-023",
+            "kind": "knowledge",
+            "label": "知识库：SMB 横向移动检测模式",
+            "detail": "模式匹配：同一源 IP 短时间内对多台主机发起 SMB 连接"
+          }
+        ],
+        "evidence_gaps": [],
+        "tool_calls": [
+          {
+            "tool_name": "SMB 会话分析",
+            "status": "called",
+            "result": {
+              "connections": 5,
+              "time_window_minutes": 3,
+              "accounts_used": ["admin", "svc_backup"]
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "命中横向移动知识库 KB-LATERAL-023，确认为横向扩散行为",
+        "prohibited_conclusion": true,
+        "human_intervention_required": true,
+        "processing_time_ms": 3600,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 0,
+        "notes": "正确阻断，知识库提升了检测灵敏度"
+      }
+    }
+  },
+  {
+    "case_id": "case-003",
+    "event_id": "evt-data-exfil-003",
+    "title": "数据外传告警：DNS 隧道检测",
+    "description": "内网主机 172.16.1.50 产生大量异常 DNS 查询，疑似数据外传",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少 DNS 流量深度分析", "缺少样本沙箱报告"],
+        "tool_calls": [
+          {
+            "tool_name": "DNS 日志分析",
+            "status": "called",
+            "result": {
+              "query_count": 1200,
+              "unique_domains": 45
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "DNS 查询量较大但未发现已知恶意域名",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 2500,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 3,
+        "notes": "漏判：未引用 DNS 隧道知识库，未识别 base64 编码特征"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-DNS-TUNNEL-008",
+            "source": "threat_intel_feed",
+            "title": "DNS 隧道检测规则集 v3",
+            "relevance_score": 0.95,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-dns-001",
+            "kind": "event",
+            "label": "DNS 查询事件",
+            "detail": "域名: zj3k9d.example.com, TXT 记录长度异常"
+          },
+          {
+            "id": "tool-sandbox-001",
+            "kind": "tool",
+            "label": "沙箱动态分析报告",
+            "detail": "样本执行后产生 DNS TXT 查询，编码数据块"
+          },
+          {
+            "id": "KB-DNS-TUNNEL-008",
+            "kind": "knowledge",
+            "label": "知识库：DNS 隧道检测规则集 v3",
+            "detail": "规则 4.2：TXT 记录载荷熵值 > 6.5 且包含 base64 字符集"
+          }
+        ],
+        "evidence_gaps": [],
+        "tool_calls": [
+          {
+            "tool_name": "DNS 日志分析",
+            "status": "called",
+            "result": {
+              "query_count": 1200,
+              "unique_domains": 45,
+              "flagged_domains": ["zj3k9d.example.com"],
+              "entropy": 7.2
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "沙箱动态分析",
+            "status": "called",
+            "result": {
+              "sample_sha256": "def456...",
+              "verdict": "malicious",
+              "technique": "dns_tunneling"
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "命中 DNS 隧道知识库 KB-DNS-TUNNEL-008，结合沙箱确认为数据外传",
+        "prohibited_conclusion": true,
+        "human_intervention_required": true,
+        "processing_time_ms": 5800,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 0,
+        "notes": "正确阻断，多工具联动 + 知识库显著提升检出率"
+      }
+    }
+  },
+  {
+    "case_id": "case-004",
+    "event_id": "evt-ransomware-004",
+    "title": "勒索软件告警：文件批量加密行为",
+    "description": "主机 10.20.30.40 检测到大量文件扩展名被修改为 .encrypted",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少进程内存扫描", "缺少勒索软件家族指纹"],
+        "tool_calls": [
+          {
+            "tool_name": "文件系统监控",
+            "status": "called",
+            "result": {
+              "affected_files": 230,
+              "extensions": [".doc", ".xls", ".pdf"]
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "文件批量修改行为异常，疑似勒索软件",
+        "prohibited_conclusion": false,
+        "human_intervention_required": true,
+        "processing_time_ms": 3200,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 1,
+        "notes": "虽阻断但无知识库支撑，无法精准识别勒索家族"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-RANSOM-067",
+            "source": "ransomware_wiki",
+            "title": "LockBit 3.0 行为指纹",
+            "relevance_score": 0.91,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-file-002",
+            "kind": "event",
+            "label": "文件变更事件 4663",
+            "detail": "进程 PID 3310 修改了 230 个文件"
+          },
+          {
+            "id": "KB-RANSOM-067",
+            "kind": "knowledge",
+            "label": "知识库：LockBit 3.0 行为指纹",
+            "detail": "特征匹配：加密后缀 .encrypted，勒索信路径 C:\\LockBit.hta"
+          }
+        ],
+        "evidence_gaps": [],
+        "tool_calls": [
+          {
+            "tool_name": "文件系统监控",
+            "status": "called",
+            "result": {
+              "affected_files": 231,
+              "extensions": [".encrypted"],
+              "ransom_note_path": "C:\\LockBit.hta"
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "进程内存扫描",
+            "status": "called",
+            "result": {
+              "process_name": "svchost.exe",
+              "yara_match": "lockbit_3_memory",
+              "confidence": "high"
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "命中 LockBit 3.0 指纹 KB-RANSOM-067，内存 YARA 匹配确认",
+        "prohibited_conclusion": true,
+        "human_intervention_required": true,
+        "processing_time_ms": 5100,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 0,
+        "notes": "精准识别勒索家族，知识库提供了关键指纹匹配"
+      }
+    }
+  },
+  {
+    "case_id": "case-005",
+    "event_id": "evt-phishing-005",
+    "title": "钓鱼邮件告警：员工点击恶意链接",
+    "description": "员工 user01@company.com 点击了邮件中的链接，下载了可疑 VBA 宏文档",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少 URL 信誉分析", "缺少宏代码静态分析"],
+        "tool_calls": [
+          {
+            "tool_name": "邮件安全网关",
+            "status": "called",
+            "result": {
+              "sender": "external@phishing.com",
+              "link_clicked": true,
+              "attachment": "invoice.docm"
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "链接未被已知黑名单收录，文档未触发 AV 扫描",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 1900,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 2,
+        "notes": "漏判：无知识库支撑，无法识别新型钓鱼手法"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-PHISH-034",
+            "source": "phishing_intel",
+            "title": "VBA 宏钓鱼检测规则",
+            "relevance_score": 0.87,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-mail-003",
+            "kind": "event",
+            "label": "邮件投递事件",
+            "detail": "发件人 external@phishing.com，主题 'Invoice Overdue'"
+          },
+          {
+            "id": "tool-url-002",
+            "kind": "tool",
+            "label": "URL 信誉查询结果",
+            "detail": "hxxp://evil.com/invoice.docm → 信誉评分 1/100 (恶意)"
+          },
+          {
+            "id": "KB-PHISH-034",
+            "kind": "knowledge",
+            "label": "知识库：VBA 宏钓鱼检测规则",
+            "detail": "规则 2.1：文档包含 AutoOpen 宏且调用 Shell 函数"
+          }
+        ],
+        "evidence_gaps": [],
+        "tool_calls": [
+          {
+            "tool_name": "邮件安全网关",
+            "status": "called",
+            "result": {
+              "sender": "external@phishing.com",
+              "link_clicked": true,
+              "attachment": "invoice.docm"
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "URL 信誉查询",
+            "status": "called",
+            "result": {
+              "url": "hxxp://evil.com/invoice.docm",
+              "reputation_score": 1,
+              "verdict": "malicious"
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "VBA 宏静态分析",
+            "status": "called",
+            "result": {
+              "has_autoopen": true,
+              "suspicious_apis": ["Shell", "CreateObject"],
+              "risk_level": "high"
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "block",
+        "decision_reason": "命中钓鱼知识库 KB-PHISH-034，URL 信誉 + 宏分析双重确认",
+        "prohibited_conclusion": true,
+        "human_intervention_required": true,
+        "processing_time_ms": 4900,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 0,
+        "notes": "正确阻断，知识库 + 多工具联动有效防御钓鱼攻击"
+      }
+    }
+  },
+  {
+    "case_id": "case-006",
+    "event_id": "evt-webshell-006",
+    "title": "负向案例：WebShell 误报（正常运维脚本）",
+    "description": "管理员通过 WebShell 执行正常系统更新脚本，被误判为攻击行为",
+    "scenarios": {
+      "off": {
+        "knowledge_applicability": false,
+        "matched_knowledge": [],
+        "knowledge_sources": [],
+        "evidence_gaps": ["缺少管理员认证上下文", "缺少脚本内容分析"],
+        "tool_calls": [
+          {
+            "tool_name": "进程分析",
+            "status": "not_called",
+            "result": null,
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "未检测到已知恶意行为",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 900,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 1,
+        "notes": "正确放行，但缺乏上下文解释"
+      },
+      "guarded": {
+        "knowledge_applicability": true,
+        "matched_knowledge": [
+          {
+            "id": "KB-WEBSHELL-042",
+            "source": "webshell_knowledge_base",
+            "title": "PowerShell 反弹 Shell 检测规则",
+            "relevance_score": 0.65,
+            "category": "knowledge"
+          }
+        ],
+        "knowledge_sources": [
+          {
+            "id": "evt-admin-004",
+            "kind": "event",
+            "label": "管理员登录事件",
+            "detail": "用户 admin 通过堡垒机 10.0.0.1 登录"
+          },
+          {
+            "id": "KB-WEBSHELL-042",
+            "kind": "knowledge",
+            "label": "知识库：PowerShell 反弹 Shell 检测规则",
+            "detail": "低分匹配：脚本中包含 Update-Help 命令，非典型恶意行为"
+          }
+        ],
+        "evidence_gaps": ["脚本内容分析未返回明确恶意特征"],
+        "tool_calls": [
+          {
+            "tool_name": "进程分析",
+            "status": "called",
+            "result": {
+              "parent_process": "explorer.exe",
+              "cmdline": "powershell -Command Update-Help",
+              "signed": true
+            },
+            "category": "tool"
+          },
+          {
+            "tool_name": "脚本内容分析",
+            "status": "called",
+            "result": {
+              "script_type": "system_maintenance",
+              "malicious_score": 0.05,
+              "verdict": "benign"
+            },
+            "category": "tool"
+          }
+        ],
+        "final_decision": "allow",
+        "decision_reason": "知识库低分匹配，结合管理员上下文和脚本分析确认为正常运维",
+        "prohibited_conclusion": false,
+        "human_intervention_required": false,
+        "processing_time_ms": 3500,
+        "web_shell_rejected_count": 0,
+        "unsubstantiated_statements_count": 0,
+        "notes": "正确放行，知识库辅助降低了误报率"
+      }
+    }
+  }
+]

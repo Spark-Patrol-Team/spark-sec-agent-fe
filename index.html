@@ -3,10 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>安全智能体系统 · 运营看板</title>
+<title>安全智能体系统</title>
+
+<!-- API 地址配置：切换后端时只改这一处 -->
+<meta name="api-base" content="http://124.221.234.124">
+<script>window.__APP_CONFIG__ = { API: "http://124.221.234.124" };</script>
+<!-- 本地调试时改为：content="http://127.0.0.1:8000" -->
+
 <link rel="stylesheet" href="styles.css">
 <style>
-  /* 支持证据折叠列表样式 */
+  /* 支持证据折叠列表样式（原样式保留） */
   .evidence-list {
     margin: 4px 0 0 0;
     padding-left: 20px;
@@ -17,54 +23,125 @@
     color: #94a3b8;
     cursor: pointer;
   }
+
+  /* ===== 新增导航栏样式 ===== */
+  .tab-nav {
+    display: flex;
+    background: #1a2338;
+    border-bottom: 1px solid #2e3c57;
+    padding: 0 20px;
+    position: sticky;
+    top: 52px; /* header 高度约为 52px，使其粘在 header 下方 */
+    z-index: 99;
+  }
+  .tab-nav button {
+    background: transparent;
+    border: none;
+    color: #8b97ad;
+    padding: 12px 28px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .tab-nav button:hover {
+    color: #c8d0dc;
+  }
+  .tab-nav button.active {
+    color: #4f8cff;
+    border-bottom-color: #4f8cff;
+  }
+
+  /* Tab 内容容器 */
+  .tab-content {
+    display: none;
+  }
+  .tab-content.active {
+    display: block;
+  }
+
+  /* iframe 样式 */
+  #tab-eval iframe {
+    width: 100%;
+    height: calc(100vh - 104px); /* 104px ≈ header(52px) + nav(44px) + 底部留白 */
+    border: none;
+    background: #0b0e17;
+  }
+
+ /* 调整原页面 container 在 tab 内的边距 */
+  #tab-dashboard .container {
+    padding-top: 0;
+  }
+
+  /* ===== 去掉 source 列的蓝色框，保留文字 ===== */
+  .src-cell {
+    border: none !important;
+    background: transparent !important;
+    color: inherit;
+  }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">安全智能体系统 <span class="sub">· 运营看板</span></div>
+  <div class="brand">安全智能体系统 </div>
   <div class="source-tag" id="source-tag">数据来源：加载中…</div>
 </header>
 
-<div class="container">
-  <!-- 左侧 -->
-  <div class="left-panel">
-    <section class="card">
-      <div class="card-head">
-        <h3>事件列表</h3>
-      </div>
-      <div class="table-header">
-        <div>event_id</div><div>trace_id</div><div>status</div>
-        <div>source</div><div>summary</div><div>操作</div>
-      </div>
-      <div id="event-list"></div>
-    </section>
+<!-- 导航栏 -->
+<div class="tab-nav">
+  <button class="active" onclick="switchTab(event, 'dashboard')">📊 运营看板</button>
+  <button onclick="switchTab(event, 'eval')">🧪 A/B 评测</button>
+</div>
 
-    <section class="card">
-      <div class="card-head">
-        <h3>关键指标</h3>
-      </div>
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">total_events</div><div class="kpi-value" id="kpi-total">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">completed_events</div><div class="kpi-value" id="kpi-completed">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">human_required_events</div><div class="kpi-value" id="kpi-human">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">failed_events</div><div class="kpi-value" id="kpi-failed">--</div></div>
-      </div>
-    </section>
-  </div>
+<!-- Tab 1: 运营看板（原内容） -->
+<div id="tab-dashboard" class="tab-content active">
+  <div class="container">
+    <!-- 左侧 -->
+    <div class="left-panel">
+      <section class="card">
+        <div class="card-head">
+          <h3>事件列表</h3>
+        </div>
+        <div class="table-header">
+          <div>event_id</div><div>trace_id</div><div>status</div>
+          <div>source</div><div>summary</div><div>操作</div>
+        </div>
+        <div id="event-list"></div>
+      </section>
 
-  <!-- 右侧详情 -->
-  <div class="right-panel">
-    <div class="card-head">
-      <h3>事件详情 / 可审计处理时间线</h3>
+      <section class="card">
+        <div class="card-head">
+          <h3>关键指标</h3>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">total_events</div><div class="kpi-value" id="kpi-total">--</div></div>
+          <div class="kpi-card"><div class="kpi-label">completed_events</div><div class="kpi-value" id="kpi-completed">--</div></div>
+          <div class="kpi-card"><div class="kpi-label">human_required_events</div><div class="kpi-value" id="kpi-human">--</div></div>
+          <div class="kpi-card"><div class="kpi-label">failed_events</div><div class="kpi-value" id="kpi-failed">--</div></div>
+        </div>
+      </section>
     </div>
-    <div id="detail" class="detail-box">
-      <p class="placeholder">点击左侧事件查看详情…</p>
-      <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
+
+    <!-- 右侧详情 -->
+    <div class="right-panel">
+      <div class="card-head">
+        <h3>事件详情 / 可审计处理时间线</h3>
+      </div>
+      <div id="detail" class="detail-box">
+        <p class="placeholder">点击左侧事件查看详情…</p>
+        <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- 审批弹窗 -->
+<!-- Tab 2: A/B 评测（iframe 嵌入） -->
+<div id="tab-eval" class="tab-content">
+  <iframe src="./eval/index.html" title="A/B 评测"></iframe>
+</div>
+
+<!-- 审批弹窗（保持不变） -->
 <div id="approval-modal" class="modal-overlay">
   <div class="modal-content">
     <div class="modal-header">
@@ -107,5 +184,18 @@
 
 <script src="demo-data.js"></script>
 <script src="app.js"></script>
+
+<script>
+  // Tab 切换函数
+  function switchTab(event, tabName) {
+    // 移除所有 tab 内容的 active 类
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    // 移除所有按钮的 active 类
+    document.querySelectorAll('.tab-nav button').forEach(btn => btn.classList.remove('active'));
+    // 激活目标 tab 和按钮
+    document.getElementById('tab-' + tabName).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+</script>
 </body>
 </html>

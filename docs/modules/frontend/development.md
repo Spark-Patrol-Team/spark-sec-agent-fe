@@ -264,8 +264,6 @@ uvicorn sec_agent.api.app:app --reload --app-dir src
 
 
 
-好的，以下是今天（2026-09-02）的 `development.md` 更新内容，仅包含 T0902 部分：
-
 ---
 
 # T0902 开发说明
@@ -371,6 +369,150 @@ document.getElementById('detail-run-id').title = data.run_id;
 |---|---|---|---|
 | P1 | trace_id 列未实现自动换行，仅靠悬停查看完整 ID | 否（体验优化） | 可考虑调整 Grid 列宽或使用 `text-overflow: ellipsis` + `title` 组合 |
 | P1 | 当 `fixed_sample` 和 `xdr` 来源同时存在时，来源标签统一显示“真实数据”，可能让用户误以为全部为真实数据 | 否（当前设计如此） | 需与产品/验收方确认最终文案；如需精确区分，应改为逐行标注来源或在标签中增加数量说明 |
+
+
+
+
+# T0906 开发说明
+
+## 一、代码改动范围
+
+### 1. `eval/index.html`（评测页结构）
+
+- **独立页面骨架**：新建 `eval/index.html`，包含完整的 HTML 结构（头部统计栏、案例列表容器、弹窗模态框），通过 iframe 嵌入主站"A/B 评测"Tab。
+- **三类来源区分**：在案例卡片中，事件证据、工具证据、通用知识引用分别使用 `src-event`、`src-tool`、`src-knowledge` 类名，左侧有色标区分。
+- **双栏对比布局**：每个案例采用 CSS Grid 两栏布局，左栏展示 OFF（无知识增强），右栏展示 GUARDED（有知识增强）。
+
+### 2. `eval/app.js`（评测页核心逻辑）
+
+- **数据获取与降级**：`loadData()` 优先请求 `GET /eval/comparisons`（超时 5 秒），成功后使用远程数据；失败则 `fetch('./mock/eval-data.json')` 降级到本地 Mock，控制台打印"Mock 数据加载成功，共 N 个案例"。
+- **汇总统计**：`renderSummary()` 遍历所有案例，计算 WebShell 知识被拒总数（`scenarios[*].knowledge.web_shell_rejected`）、无依据结论总数（`unsubstantiated_conclusions`）、人工接管案例数、平均耗时。
+- **双栏渲染**：`renderScenario()` 分别渲染 off / guarded 两栏，展示知识适用性、命中知识 ID、证据缺口、知识/证据来源列表、工具调用状态、最终结论。
+- **弹窗查看原始证据**：`openEvidenceModal()` 将完整场景 JSON 格式化后展示在模态框中，支持点击遮罩层或关闭按钮关闭。
+- **数据来源标签**：右上角标签根据降级状态显示"实时数据（{API}）"或"演示数据（前端降级 · 等待 fixture）"。
+
+### 3. `eval/styles.css`（评测页样式）
+
+- **独立样式文件**：不与旧主页 `styles.css` 耦合，所有样式 scoped 在评测页内。
+- **关键样式**：`.stat-pill.webshell`、`.stat-pill.unsub` 区分告警类型；`.src-event`、`.src-tool`、`.src-knowledge` 三类来源左侧色标；`.scenario.off`、`.scenario.guarded` 双栏网格布局。
+
+### 4. `mock/eval-data.json`（Mock 数据）
+
+- **6 个案例**：覆盖 WebShell 被拒、无依据结论、人工接管等场景，用于接口不可用时的降级展示。
+
+### 5. 主站 `index.html`
+
+- **无变更**：仅通过 iframe 引用 `./eval/index.html`，未改动旧主页核心逻辑。
+
+## 二、本地运行环境
+
+### 前端（端口 8080）
+
+```bash
+python -m http.server 8080
+```
+
+启动后访问：http://localhost:8080
+
+> 评测页通过 iframe 自动加载，无需额外配置。
+
+### 后端（远程服务器）
+
+**当前使用 Mock 数据**，后端接口（`GET /eval/comparisons`）待李雨妍实现。前端 `eval/app.js` 中 API 基址已配置为：
+
+```javascript
+const API = window.__APP_CONFIG__?.API || 'http://124.221.234.124';
+```
+
+> 接口就绪后，只需确保后端部署在 `124.221.234.124` 并暴露 `/eval/comparisons` 端点，前端无需改动代码。
+
+**备选：本地启动后端（仅当需要本地调试时）**
+
+```bash
+.\venv311\Scripts\activate
+uvicorn sec_agent.api.app:app --reload --app-dir src
+```
+
+启动成功后访问：http://localhost:8000
+
+> 若使用本地后端，需同步修改 `eval/app.js` 中的 `API` 为 `http://127.0.0.1:8000`。
+
+### 关键版本
+
+- 前端 Commit：待从 `main` 创建独立分支 `feature/ab-eval`
+- 后端 Commit：`da07641`（对应 `124.221.234.124` 部署）
+- Python：3.11（仅本地调试时需要）
+
+## 三、关键函数说明
+
+### 1. `loadData()` — 数据获取与降级
+
+```javascript
+// 伪代码示意
+async function loadData() {
+  try {
+    const res = await fetchWithTimeout(API + '/eval/comparisons', 5000);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderAll(data);
+    updateSourceTag(true);  // 实时数据
+  } catch (e) {
+    console.warn('[eval] 接口不可用，准备降级：', e.message);
+    const mock = await fetch('./mock/eval-data.json').then(r => r.json());
+    console.log('Mock 数据加载成功，共', mock.length, '个案例');
+    renderAll(mock);
+    updateSourceTag(false); // 演示数据
+  }
+}
+```
+
+### 2. `renderSummary()` — 顶部汇总统计
+
+遍历所有案例，计算并渲染：
+- 评测案例总数
+- WebShell 知识被拒次数（累加 `knowledge.web_shell_rejected`）
+- 无依据结论数（累加 `unsubstantiated_conclusions`）
+- 人工接管案例数（统计 `status === 'HUMAN_REQUIRED'`）
+
+### 3. `renderCase()` — 案例卡片渲染
+
+为每个案例生成卡片 DOM，包含：
+- 头部：`case_id`、`event_id`、状态徽章
+- 双栏：`renderScenario('off')` + `renderScenario('guarded')`
+- 底部：WebShell 被拒 / 无依据结论 / 人工接管 / 耗时指标 + "查看原始证据"按钮
+
+### 4. `renderScenario()` — 单场景渲染
+
+渲染单个场景（off 或 guarded），包含：
+- **知识适用性**：`knowledge.applicable`（不适用 / 已应用 / 部分应用）
+- **命中知识 ID**：`knowledge.matched_ids`（列表展示，如 `KB-WEBSHELL-042`）
+- **证据缺口**：`evidence_gaps`（列表展示）
+- **知识/证据来源**：区分 `src-event`（事件证据）、`src-tool`（工具证据）、`src-knowledge`（通用知识引用），左侧有色标
+- **工具调用状态**：`tool_calls[*].status`（成功 / 失败 / 未调用）
+- **最终结论**：`conclusion`（allow / block / pending）
+
+### 5. `openEvidenceModal()` — 弹窗查看原始证据
+
+```javascript
+function openEvidenceModal(scenario) {
+  const modal = document.getElementById('evidence-modal');
+  const content = document.getElementById('evidence-content');
+  content.textContent = JSON.stringify(scenario, null, 2);
+  modal.style.display = 'flex';
+}
+```
+
+点击遮罩层或关闭按钮关闭弹窗。
+
+
+## 四、已知限制 / 后续事项
+
+| 优先级 | 事项 | 是否影响主链 | 负责人/完成条件 |
+|---|---|---|---|
+| P0 | 后端 `/eval/comparisons` 接口未实现，当前使用 Mock 数据 | 否（页面可展示） | 等待李雨妍提供稳定 fixture 并部署 |
+| P1 | 弹窗 JSON 展示为纯文本，无语法高亮 | 否（功能可用） | 后续可集成 `highlight.js` |
+| P2 | 评测案例数量固定为 6，未做分页 | 否（数据量小） | 若案例超过 20 个，需加分页或虚拟滚动 |
+
 
 
 
