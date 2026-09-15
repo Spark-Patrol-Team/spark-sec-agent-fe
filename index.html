@@ -1,97 +1,169 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>安全智能体系统 · 运营看板</title>
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="api-base" content="http://127.0.0.1:8000">
+  <title>安全智能体 · 研判控制台</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css?v=20260915-2">
 </head>
 <body>
-<header>
-  <div class="brand">安全智能体系统 <span class="sub">· 运营看板</span></div>
-  <div class="source-tag" id="source-tag">数据来源：演示数据（后端未启动，已自动降级）</div>
-</header>
+  <header class="app-header">
+    <a class="brand" href="#" aria-label="安全智能体研判控制台首页">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <span>安全智能体</span>
+      <span class="brand-sub">研判控制台</span>
+    </a>
 
-<div class="container">
-  <!-- 左侧 -->
-  <div class="left-panel">
-    <section class="card">
-      <div class="card-head">
-        <h3>事件列表</h3>
-      </div>
-      <div class="table-header">
-        <div>event_id</div><div>trace_id</div><div>status</div>
-        <div>source</div><div>summary</div><div>操作</div>
-      </div>
-      <div id="event-list"></div>
-    </section>
-
-    <section class="card">
-      <div class="card-head">
-        <h3>关键指标</h3>
-      </div>
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">total_events</div><div class="kpi-value" id="kpi-total">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">completed_events</div><div class="kpi-value" id="kpi-completed">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">human_required_events</div><div class="kpi-value" id="kpi-human">--</div></div>
-        <div class="kpi-card"><div class="kpi-label">failed_events</div><div class="kpi-value" id="kpi-failed">--</div></div>
-      </div>
-    </section>
-  </div>
-
-  <!-- 右侧详情 -->
-<div class="right-panel">
-  <div class="card-head">
-    <h3>事件详情 / 可审计处理时间线</h3>
-  </div>
-  <div id="detail" class="detail-box">
-    <p class="placeholder">点击左侧事件查看详情…</p>
-    <p class="placeholder sub">Trace ID: <span id="cur-trace">--</span></p>
-  </div>
-</div>
-
-<!-- 审批弹窗 -->
-<div id="approval-modal" class="modal-overlay">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3 class="modal-title">高风险处置审批</h3>
-      <button class="close-btn" onclick="closeApprovalModal()">&times;</button>
+    <div class="connection-controls" aria-label="后端连接设置">
+      <label class="api-field">
+        <span>API</span>
+        <input id="api-base" type="url" inputmode="url" autocomplete="off" aria-label="后端 API 地址">
+      </label>
+      <button class="button button-secondary" id="connect-button" type="button">连接后端</button>
+      <button class="button button-quiet" id="demo-button" type="button">使用脱敏样例</button>
+      <span class="connection-state is-loading" id="connection-state" role="status">等待连接</span>
     </div>
-    <form id="approval-form">
-      <div class="form-group">
-        <label class="form-label">event_id</label>
-        <input id="m-event" class="form-input" readonly>
+  </header>
+
+  <nav class="section-tabs" aria-label="控制台功能">
+    <button class="section-tab is-active" id="events-tab" type="button" role="tab" aria-selected="true" aria-controls="events-page">事件研判</button>
+    <button class="section-tab" id="eval-tab" type="button" role="tab" aria-selected="false" aria-controls="eval-page">知识增强评测</button>
+  </nav>
+
+  <main>
+    <section class="page is-active" id="events-page" role="tabpanel" aria-labelledby="events-tab">
+      <div class="page-heading">
+        <div>
+          <h1>从告警到人工审批，一条链看清</h1>
+          <p>展示事件来源、研判证据、调查结论与处置边界。数据性质始终明确标注。</p>
+        </div>
+        <div class="page-actions">
+          <button class="button button-primary" id="start-sample-button" type="button">运行固定样例</button>
+          <button class="icon-button" id="refresh-events-button" type="button" aria-label="刷新事件数据" title="刷新事件数据">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8m16 8-2.2 1.8A7 7 0 0 1 5.5 15"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">approved</label>
-        <select id="m-approved" class="form-select" required>
-          <option value="">-- 请选择 --</option>
-          <option value="true">true（同意执行）</option>
-          <option value="false">false（驳回）</option>
+
+      <div class="provenance-banner" id="events-provenance">
+        <span class="provenance-dot" aria-hidden="true"></span>
+        <strong>数据状态：</strong><span>正在检查后端</span>
+      </div>
+
+      <section class="metrics-strip" aria-label="事件指标">
+        <div><span>事件总数</span><strong id="metric-total">—</strong></div>
+        <div><span>已完成</span><strong id="metric-completed">—</strong></div>
+        <div><span>需人工处理</span><strong id="metric-human">—</strong></div>
+        <div><span>失败</span><strong id="metric-failed">—</strong></div>
+      </section>
+
+      <div class="event-workspace">
+        <section class="event-list-panel" aria-labelledby="event-list-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="event-list-title">安全事件</h2>
+              <p id="event-count-label">等待加载</p>
+            </div>
+            <label class="filter-field">
+              <span class="sr-only">筛选事件</span>
+              <input id="event-filter" type="search" placeholder="搜索事件、状态或来源">
+            </label>
+          </div>
+          <div class="event-list" id="event-list" aria-live="polite"></div>
+        </section>
+
+        <section class="event-detail-panel" id="event-detail-panel" aria-labelledby="event-detail-title">
+          <div class="empty-state">
+            <div class="empty-symbol" aria-hidden="true"></div>
+            <h2 id="event-detail-title">选择一个事件查看完整证据链</h2>
+            <p>这里会展示来源、研判、调查、人工接管与处置验证状态。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="page" id="eval-page" role="tabpanel" aria-labelledby="eval-tab" hidden>
+      <div class="page-heading">
+        <div>
+          <h1>知识用得安全，报告质量也有提升</h1>
+          <p>最新受控测试展示知识增强效果；下方10案继续用于核对知识门禁的安全边界。</p>
+        </div>
+        <button class="icon-button" id="refresh-eval-button" type="button" aria-label="刷新评测数据" title="刷新评测数据">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8m16 8-2.2 1.8A7 7 0 0 1 5.5 15"/></svg>
+        </button>
+      </div>
+
+      <section class="effect-result" aria-labelledby="effect-result-title">
+        <div class="effect-result-copy">
+          <h2 id="effect-result-title">知识调用成功且安全，GUARDED 报告平均质量较 OFF 有所提升</h2>
+          <p>同一批案例仅切换知识模式进行对比，9组配对共完成18次运行。</p>
+          <span class="effect-result-source">评测快照 · main@88f18b1 · 2026-09-15</span>
+        </div>
+        <dl class="effect-result-metrics">
+          <div><dt>GUARDED 平均分</dt><dd>6.89</dd></div>
+          <div><dt>OFF 平均分</dt><dd>6.00</dd></div>
+          <div><dt>平均提升</dt><dd>+0.89</dd></div>
+          <div><dt>知识调用与返回</dt><dd>9/9</dd></div>
+        </dl>
+      </section>
+
+      <h2 class="eval-section-title">知识门禁安全性复核</h2>
+
+      <div class="provenance-banner" id="eval-provenance">
+        <span class="provenance-dot" aria-hidden="true"></span>
+        <strong>评测来源：</strong><span>尚未加载</span>
+      </div>
+
+      <section class="eval-summary" id="eval-summary" aria-label="评测摘要"></section>
+      <section class="eval-context" id="eval-context" aria-label="评测结论说明"></section>
+      <div class="eval-note">
+        <strong>如何理解</strong>
+        <span>上方回答知识增强是否改善报告质量；下方回答知识是否只在适用场景中调用。两组结果用途不同。</span>
+      </div>
+      <section class="eval-results" id="eval-results" aria-live="polite"></section>
+    </section>
+  </main>
+
+  <dialog id="approval-dialog" aria-labelledby="approval-title">
+    <form method="dialog" id="approval-form">
+      <div class="dialog-heading">
+        <div>
+          <h2 id="approval-title">人工审批</h2>
+          <p>审批请求将提交到当前连接的后端，不在前端模拟生效。</p>
+        </div>
+        <button class="icon-button" id="close-approval-button" type="button" aria-label="关闭审批窗口">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <input id="approval-event-id" type="hidden">
+      <label class="form-field">
+        <span>审批决定</span>
+        <select id="approval-decision" required>
+          <option value="">请选择</option>
+          <option value="true">同意执行</option>
+          <option value="false">驳回方案</option>
         </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">approver</label>
-        <input id="m-approver" class="form-input" placeholder="审批人姓名" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">reason</label>
-        <textarea id="m-reason" class="form-textarea" placeholder="审批意见（可选）"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">idempotency_key（前端生成 UUID）</label>
-        <input id="m-idem" class="form-input" readonly>
-      </div>
-      <p class="form-hint">POST /events/{id}/approval · Body: ApprovalDecision</p>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeApprovalModal()">取消</button>
-        <button type="submit" class="btn btn-primary">提交审批</button>
+      </label>
+      <label class="form-field">
+        <span>审批人</span>
+        <input id="approval-person" required maxlength="80" placeholder="请输入审批人姓名">
+      </label>
+      <label class="form-field">
+        <span>审批意见</span>
+        <textarea id="approval-reason" maxlength="500" placeholder="说明同意或驳回原因"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button class="button button-secondary" id="cancel-approval-button" type="button">取消</button>
+        <button class="button button-danger" id="submit-approval-button" type="submit">提交审批</button>
       </div>
     </form>
-  </div>
-</div>
+  </dialog>
 
-<script src="demo-data.js"></script>
-<script src="app.js"></script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="demo-data.js?v=20260915-2"></script>
+  <script src="app.js?v=20260915-2"></script>
 </body>
 </html>

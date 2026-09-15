@@ -99,3 +99,29 @@ window.DEMO_METRICS = {
   total_events:42, completed_events:38, human_required_events:3, failed_events:1,
   note:""
 };
+
+// 人工复核快照：用于离线讲解 A/B 结论，不代表实时调用平台模型。
+// 分数保持 2026-09-14 评分表口径；case6 的后续门禁复验在原因中单独说明。
+window.DEMO_EVAL = {
+  data_source:"review_snapshot",
+  note:"脱敏人工复核快照（10 个样例）。不是实时模型输出，也不能替代最终服务器复验。",
+  summary:{
+    total_cases:10,
+    guarded_wins:3,
+    off_wins:1,
+    ties:6,
+    manual_takeovers:10
+  },
+  results:[
+    { case_id:"case1", title:"弱信号：异常登录", applicability:"partially_applicable", winner:"tie", reason:"两组均能给出基础研判，知识门禁未形成稳定增益。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case2", title:"弱信号：可疑进程", applicability:"partially_applicable", winner:"tie", reason:"现有证据不足以拉开有效差距。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case3", title:"弱信号：横向移动迹象", applicability:"partially_applicable", winner:"tie", reason:"两组结论接近，仍需补充主机侧证据。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case4", title:"弱信号：命令执行异常", applicability:"partially_applicable", winner:"guarded", reason:"旧评分记录中 GUARDED 报告更完整；该差异不作为最新知识效果结论。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case5", title:"弱信号：异常外联", applicability:"partially_applicable", winner:"tie", reason:"知识命中不足，人工评分未确认明显收益。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case6", title:"域外问题：公开漏洞泛化询问", applicability:"not_applicable", winner:"off", reason:"旧结果包评分保留为 OFF 胜；后续 GUARDED 已通过域外门禁复验，OFF 的理论性越界措辞作为已知限制保留。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case7", title:"弱信号：认证失败聚集", applicability:"partially_applicable", winner:"tie", reason:"两组均给出谨慎结论，差异不足。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case8", title:"弱信号：脚本落地", applicability:"partially_applicable", winner:"tie", reason:"知识增强未形成可稳定复核的得分差。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } },
+    { case_id:"case9", title:"域内问题：WebShell 调查", applicability:"applicable", winner:"guarded", reason:"GUARDED 命中领域知识并提升调查建议的针对性。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:["WSK-010","WSK-001","WSK-015"] } },
+    { case_id:"case10", title:"域外问题：非安全领域请求", applicability:"not_applicable", winner:"guarded", reason:"GUARDED 更好地执行域外拒答边界；该差异用于说明门禁安全性。", off:{ verdict:"—", confidence:null }, guarded:{ verdict:"—", confidence:null, matched_knowledge_ids:[] } }
+  ]
+};

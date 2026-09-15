@@ -1,136 +1,77 @@
-# 安全智能体系统 · 前端（运营看板 MVP 单页框架 v5）
+# 安全智能体 · 演示前端
 
-本仓库为**安全大模型平台智能体系统**的前端模块，提供一个**无需构建工具、双击即可打开**的单页运营看板（Dashboard），用于可视化展示事件列表、告警关联、风险研判、可审计处理时间线、处置记录与关键指标。
+这是安全智能体后端的轻量演示入口。它用于现场展示事件研判、人工审批边界和知识门禁 A/B 复核结果，不替代 FastGPT/XDR 平台工作流，也不把 Mock、固定样例或人工复核快照标成真实运行结果。
 
-> 设计原则：前端只做展示层；Agent 核心逻辑与工具调用在深信服平台侧开发；本仓库通过 HTTP 接口与后端（`spark-sec-agent-be`）对接，字段命名严格对齐 `sec_agent/domain/models.py`（snake_case）。
+## 能展示什么
 
-## 一、项目简介
+- 连接后端，查看 `/health`、`/events`、`/events/{event_id}/view` 与 `/metrics`。
+- 运行后端 `fixed_sample` 主链；页面会持续标注它不是实时 XDR 输入。
+- 对待审批事件提交审批决定；“建议生成、人工批准、平台受理、设备生效”四个阶段分开显示。
+- 查看最新受控测试中的知识增强质量效果，并通过 `/eval/comparisons` 返回结果复核知识门禁安全性；两组数据分开展示。
+- 在没有可用后端时，由演示者主动切换到脱敏样例。接口失败时不会静默回退。
 
-- **定位**：MVP 最小可运行前端框架，用于演示主链主要状态流转与接口对接能力。
-- **技术栈**：原生 HTML + CSS + JavaScript（ES6），**无第三方依赖**，不依赖 Node.js / npm / Webpack。
-- **运行方式**：采用前后端分离架构，后端配置仅允许本地开发地址的 CORS，前端通过本地 HTTP 服务打开。
-- **适用场景**：组长/评委演示、前后端接口联调、运营看板原型验证。
+## 运行
 
-## 二、文件结构
+本项目是原生 HTML、CSS 和 JavaScript，无 npm 依赖。请在仓库目录启动静态服务：
 
-```
-spark-sec-agent-fe/
-├── index.html          # 单页入口（三段式布局：列表 + 详情 + 指标）
-├── app.js              # 数据层 + 渲染逻辑 + 审批弹窗交互
-├── demo-data.js        # 演示数据（人工构造 Mock，字段对齐 models.py）
-├── styles.css          # 深色后台样式
-├── README.md           # 本文件
-├── assets/             # 静态资源（截图等，须脱敏后提交）
-├── docs/
-│   └── modules/
-│       └── frontend/   # 前端模块文档（团队规范目录）
-│           ├── design.md        # 设计说明
-│           ├── development.md   # 开发运行说明
-│           └── test.md          # 测试案例与结果
-└── .gitignore
+```bash
+python -m http.server 8080
 ```
 
-## 三、运行方式
+然后访问：
 
-### 方式一：直接打开（演示模式，推荐首次体验）
+- `http://127.0.0.1:8080/`：尝试连接默认后端 `http://127.0.0.1:8000`。
+- `http://127.0.0.1:8080/?api=http://服务器地址:端口`：指定后端地址。
+- `http://127.0.0.1:8080/?demo=1`：直接进入脱敏样例模式，适合离线彩排。
 
-双击 `index.html`，浏览器打开后即可看到运营看板。此时：
+页面顶部也可以修改后端地址。成功连接过的地址会保存在当前浏览器的 `localStorage` 中。
 
-- 页面右上角提示：**"数据来源：演示数据（后端未启动，已自动降级）"**。
-- 事件列表覆盖 4 种代表性状态：`COMPLETED` / `INVESTIGATING` / `APPROVAL_REQUIRED` / `FAILED`。
-- 所有渲染均基于 `demo-data.js` 内嵌数据，不发起任何网络请求。
+## 数据真实性标识
 
-### 方式二：对接真实后端（推荐联调使用）
-
-采用前后端分离架构：后端配置仅允许本地开发地址的 CORS，前端通过本地 HTTP 服务打开。
-
-1. **启动后端**：
-   ```bash
-   cd spark-sec-agent-be
-   pip install -e .
-   uvicorn sec_agent.main:app --reload
-   ```
-   后端运行在 `http://localhost:8000`。
-
-2. **启动前端本地 HTTP 服务**（**禁止直接双击 `index.html`**）：
-   ```bash
-   cd spark-sec-agent-fe
-   python -m http.server 8080
-   ```
-
-3. **访问页面**：浏览器打开 `http://localhost:8080/index.html`
-
-4. 确认 `app.js` 顶部 `API` 常量为 `http://localhost:8000`。
-
-5. 刷新页面，前端自动请求真实接口；若接口不可达则自动回退演示数据。
-
-> **降级说明**：前端只有在**后端服务未启动**或**接口返回错误**时，才会自动切换到 `demo-data.js` 的演示数据。页面右上角会明确显示"数据来源：演示数据（后端未启动，已自动降级）"。联调时应确保后端已启动，且右上角显示"数据来源：后端接口（真实数据）"。
-
-### 调试方法
-
-- 打开浏览器开发者工具（F12）→ **Console** 面板查看数据请求日志与错误；**Network** 面板查看接口请求/响应详情。
-
-## 四、接口契约（对齐 `api/routes/events.py`）
-
-| 接口路径 | 方法 | 请求参数 | 响应主体（对齐 models.py） | 前端用途 |
-|---|---|---|---|---|
-| `/events` | GET | 无 | `EventListItem[]` | 左侧事件列表 |
-| `/events/{event_id}` | GET | path param `event_id` | `SecurityEvent` | 右侧详情（告警关联/研判） |
-| `/events/{event_id}/timeline` | GET | path param `event_id` | `TimelineEntry[]` | 可审计处理时间线 |
-| `/events/{event_id}/approval` | POST | body: `ApprovalDecision` | `{"status": "ok"}` | 审批弹窗提交 |
-| `/metrics` | GET | 无 | 指标聚合对象 | 底部关键指标卡片 |
-| `/runs` | POST | body: `StartRunRequest` | 触发一次分析运行 | （可选）演示数据生成 |
-
-### 审批接口字段（`ApprovalDecision`）
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `approved` | bool | 审批决定（true=同意执行 / false=驳回） |
-| `approver` | str | 审批人姓名 |
-| `reason` | str | 审批意见 |
-| `idempotency_key` | str | 防重提交键（前端 `crypto.randomUUID()` 生成） |
-
-## 五、数据项与字段对照（对齐 `domain/models.py`）
-
-| 前端区域 | 使用的模型 / 字段 |
+| 页面标识 | 含义 |
 |---|---|
-| 事件列表行 | `EventListItem`：`event_id` `run_id` `trace_id` `status` `source` `summary` |
-| 告警关联 | `SecurityEvent`：`summary` `correlation_reason` `alert_count_before` `event_count_after` `entities` |
-| 风险研判 | `TriageResult`：`verdict` `confidence` `risk_score` `priority` `supporting_evidence_refs` `opposing_evidence_refs` `evidence_gaps` |
-| 调查证据链 | `InvestigationReport.steps[]`：`step_no` `goal` `tool_request` `observation` |
-| 处置记录 | `ResponseResult`：`plan` `execution.mode` `verification.status` / `final_status` |
-| 状态时间线 | `TimelineEntry`：`at` `status` `message` `elapsed_ms` |
-| 审批弹窗 | `ApprovalDecision`：`approved` `approver` `reason` `idempotency_key` |
+| 在线接口 | 当前内容来自配置的后端；仍需结合版本证据确认该服务对应哪个 Commit |
+| 真实 XDR 输入 | 后端声明该事件的有效来源为 `xdr_openapi` / `xdr` |
+| 固定演示样例 | 后端运行 `fixed_sample`，可复现但不是真实 XDR |
+| 回退数据 | 后端声明实际使用了 fallback source |
+| 脱敏演示样例（Mock） | `demo-data.js` 内置的人工构造数据，只用于离线展示 |
+| 正式结果包 | `/eval/comparisons` 返回 `data_source=actual` |
+| 后端 Mock | `/eval/comparisons` 返回 `data_source=mock_fixture`，只用于接口联调 |
+| 复核摘要 | 前端内置的人工评分表脱敏摘要，不是在线模型输出 |
 
-### 11 种业务状态颜色映射
+当前页面不会仅凭 `/health` 成功就宣称“最终版本已部署”。最终部署仍需 Commit、镜像摘要、容器信息或版本接口等绑定证据。
 
-| 状态 | 颜色 | 含义 |
+## 接口契约
+
+| 方法 | 路径 | 用途 |
 |---|---|---|
-| `RECEIVED` | 灰 | 已接收 |
-| `CORRELATING` | 蓝 | 关联分析中 |
-| `TRIAGED` | 蓝 | 已完成分级研判 |
-| `INVESTIGATING` | 蓝 | 深度调查中 |
-| `DECISION_READY` | 青 | 处置决策就绪 |
-| `APPROVAL_REQUIRED` | 红（闪烁） | 需人工审批 |
-| `EXECUTING` | 橙 | 处置执行中 |
-| `VERIFYING` | 橙 | 处置效果验证中 |
-| `COMPLETED` | 绿 | 已闭环 |
-| `HUMAN_REQUIRED` | 红 | 需人工介入 |
-| `FAILED` | 灰 | 失败/异常 |
+| GET | `/health` | 连通性检查 |
+| GET | `/events` | 事件列表 |
+| GET | `/events/{event_id}/view` | 面向前端的事件详情 |
+| GET | `/metrics` | 总事件、闭环、人工介入和失败统计 |
+| POST | `/runs` | 以 `{ "source": "fixed_sample" }` 启动可复现样例 |
+| POST | `/events/{event_id}/approval` | 提交人工审批 |
+| GET | `/eval/comparisons` | 获取 OFF/GUARDED A/B 结果 |
 
-## 六、演示数据说明
+评测页首先展示绑定`main@88f18b1`的受控测试快照：9组配对共18次运行，知识调用与返回9/9，GUARDED平均6.89分、OFF平均6.00分，平均提升0.89分。下方10案单独展示适用场景知识命中、弱信号未错误升级和域外未释放知识，用于复核知识门禁安全边界。
 
-- **来源**：`demo-data.js` 为**人工构造**的 Mock 数据，不包含任何真实平台数据。
-- **标注**：文件头部已注明数据性质（`人工构造 Mock，字段对齐 domain/models.py`）。
-- **降级策略**：`app.js` 先尝试 `fetch` 真实接口，捕获网络错误/非 2xx 后自动切换到 `demo-data.js`，保证演示不中断。
-- **指标数据**：底部 KPI 卡片在无真实数据时显示"暂无数据"，有模拟数据时明确标注"演示数据，不替代真实评测指标"。
+后端需允许前端所在 Origin 的 CORS。推荐统一由反向代理提供同源访问；本地联调时通常是 `http://127.0.0.1:8080` 或 `http://localhost:8080`。
 
-## 七、安全与合规
+## 文件
 
-- 前端不存储任何敏感信息（账号、密码、Token、内网地址）。
-- 禁止提交平台原始截图、真实返回、凭据与接入码；如需截图须先脱敏再放 `assets/`。
-- 审批 `idempotency_key` 由前端 `crypto.randomUUID()` 生成，防止网络重试导致重复提交。
+```text
+index.html      页面结构与可访问性语义
+styles.css      响应式界面与状态样式
+app.js          API 请求、渲染、错误与交互逻辑
+demo-data.js    明确标注的脱敏 Mock 和人工复核快照
+```
 
----
+## 演示注意
 
-**维护者**：黄佳丽 · **所属模块**：frontend · **任务编号**：T0824-黄佳丽-前端运行说明修正
+1. 正式演示优先使用已绑定最终 Commit 的后端，并核对顶部 API 地址。
+2. 在线接口异常时，页面保留错误，不会自动拿 Mock 顶替；需要时手动点击“使用脱敏样例”。
+3. `fixed_sample` 只证明固定输入的主链可运行，不能证明真实 XDR 接入。
+4. “平台已受理”不等于“设备已生效”；只有独立验证证据成立时，页面才把最后一步显示为已确认。
+5. 不要把平台凭据、接入码或未脱敏原始报告放进本仓库。
+
+原模块责任人记录仍为黄佳丽；本目录是 2026-09-15 收口阶段的独立候选工作树，尚未推送、合并或部署。
